@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="260" viewBox="0 0 480 260">
+  <defs>
+    <linearGradient id="bg_stk_01" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="bar_stk_01" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0284C7"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="260" rx="14" fill="url(#bg_stk_01)"/>
+  <rect x="0" y="0" width="480" height="5" fill="url(#bar_stk_01)"/>
+  <circle cx="24" cy="27" r="4.5" fill="#EF4444"/>
+  <circle cx="39" cy="27" r="4.5" fill="#F59E0B"/>
+  <circle cx="54" cy="27" r="4.5" fill="#10B981"/>
+  <rect x="70" y="18" width="246" height="18" rx="5" fill="#0B1120"/>
+  <text x="80" y="31" font-family="Consolas,monospace" font-size="10" fill="#94A3B8">SSI Careers (Enterprise  | stk_01</text>
+  <rect x="328" y="16" width="132" height="22" rx="11" fill="#1E293B" stroke="#0284C7" stroke-width="1"/>
+  <text x="394" y="31" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" fill="#E2E8F0" text-anchor="middle">ENTERPRISE AI CV</text>
+  <line x1="20" y1="48" x2="460" y2="48" stroke="#334155" stroke-width="1"/>
+  <rect x="24" y="64" width="52" height="52" rx="12" fill="#BAE6FD"/>
+  <text x="50" y="97" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="800" fill="#0284C7" text-anchor="middle">CK</text>
+  <text x="90" y="83" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="16" font-weight="800" fill="#F8FAFC">Thực tập sinh Phân tích Cổ phiếu &amp; Dữ liệu (...</text>
+  <text x="90" y="106" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" fill="#0284C7">Chứng khoán SSI (Chi nhánh TP.HC</text>
+  <rect x="24" y="132" width="432" height="50" rx="10" fill="#0B1120" stroke="#1E293B" stroke-width="1"/>
+  <text x="38" y="153" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" fill="#CBD5E1">Location: TP.HCM (Q.1) | Thực tập TP.HCM</text>
+  <text x="38" y="172" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" font-weight="700" fill="#34D399">Pay: 4.500.000 - 6.500.000 VNĐ</text>
+  <rect x="372" y="140" width="74" height="34" rx="8" fill="#0284C7" fill-opacity="0.18" stroke="#0284C7" stroke-width="1.2"/>
+  <text x="409" y="162" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" font-weight="800" fill="#F8FAFC" text-anchor="middle">97% FIT</text>
+  <rect x="24" y="196" width="120" height="24" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/><text x="84.0" y="212" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="11" font-weight="600" fill="#CBD5E1" text-anchor="middle">VN100 Research</text><rect x="152" y="196" width="127" height="24" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/><text x="215.5" y="212" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="11" font-weight="600" fill="#CBD5E1" text-anchor="middle">Chứng khoán UEH</text><rect x="287" y="196" width="142" height="24" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/><text x="358.0" y="212" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="11" font-weight="600" fill="#CBD5E1" text-anchor="middle">Technical Analysi</text>
+  <text x="24" y="244" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="10.5" fill="#94A3B8">ATS Coverage: 93% | Song ngành Thị trường Chứng khoán UEH + tự code </text>
+</svg>

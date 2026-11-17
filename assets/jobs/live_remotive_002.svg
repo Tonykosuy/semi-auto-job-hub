@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="260" viewBox="0 0 480 260">
+  <defs>
+    <linearGradient id="bg_live_remotive_002" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="bar_live_remotive_002" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="260" rx="14" fill="url(#bg_live_remotive_002)"/>
+  <rect x="0" y="0" width="480" height="5" fill="url(#bar_live_remotive_002)"/>
+  <circle cx="24" cy="27" r="4.5" fill="#EF4444"/>
+  <circle cx="39" cy="27" r="4.5" fill="#F59E0B"/>
+  <circle cx="54" cy="27" r="4.5" fill="#10B981"/>
+  <rect x="70" y="18" width="246" height="18" rx="5" fill="#0B1120"/>
+  <text x="80" y="31" font-family="Consolas,monospace" font-size="10" fill="#94A3B8">Remotive | live_remotive_002</text>
+  <rect x="328" y="16" width="132" height="22" rx="11" fill="#065F46" stroke="#10B981" stroke-width="1"/>
+  <text x="394" y="31" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" fill="#E2E8F0" text-anchor="middle">LIVE API</text>
+  <line x1="20" y1="48" x2="460" y2="48" stroke="#334155" stroke-width="1"/>
+  <rect x="24" y="64" width="52" height="52" rx="12" fill="#E0E7FF"/>
+  <text x="50" y="97" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="800" fill="#6366F1" text-anchor="middle">CW</text>
+  <text x="90" y="83" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="16" font-weight="800" fill="#F8FAFC">Inside Sales Contractor</text>
+  <text x="90" y="106" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" fill="#6366F1">Credit Wellness, LLC</text>
+  <rect x="24" y="132" width="432" height="50" rx="10" fill="#0B1120" stroke="#1E293B" stroke-width="1"/>
+  <text x="38" y="153" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" fill="#CBD5E1">Location: Worldwide | Remote Quốc tế</text>
+  <text x="38" y="172" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" font-weight="700" fill="#34D399">Pay: OTE $25k - $35k</text>
+  <rect x="372" y="140" width="74" height="34" rx="8" fill="#6366F1" fill-opacity="0.18" stroke="#6366F1" stroke-width="1.2"/>
+  <text x="409" y="162" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" font-weight="800" fill="#F8FAFC" text-anchor="middle">88% FIT</text>
+  <rect x="24" y="196" width="62" height="24" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/><text x="55.0" y="212" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="11" font-weight="600" fill="#CBD5E1" text-anchor="middle">CRM</text><rect x="94" y="196" width="113" height="24" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/><text x="150.5" y="212" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="11" font-weight="600" fill="#CBD5E1" text-anchor="middle">google sheets</text><rect x="215" y="196" width="142" height="24" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/><text x="286.0" y="212" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="11" font-weight="600" fill="#CBD5E1" text-anchor="middle">financial service</text>
+  <text x="24" y="244" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="10.5" fill="#94A3B8">ATS Coverage: 84% | Shipped rapid web apps and internal portals via </text>
+</svg>

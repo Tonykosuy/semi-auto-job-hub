@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Semi-Auto AI Job Hub | Nguyễn Trần Tiến Phúc</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ================= TOP COMMAND HEADER ================= -->
+  <header class="top-header">
+    <div class="header-inner">
+      <div class="candidate-brand">
+        <img src="assets/avatar.jpg" alt="Nguyễn Trần Tiến Phúc" class="candidate-avatar">
+        <div class="brand-meta">
+          <h1>
+            NGUYỄN TRẦN TIẾN PHÚC
+            <span class="badge-pill-dark"><i class="fa-solid fa-bolt"></i> Semi-Auto Job Hub + career-ops ATS</span>
+          </h1>
+          <p class="brand-sub">
+            Song ngành Chứng khoán & KDQT (UEH K51) • Airlangga Exchange • IELTS 6.0 • MOS Expert • n8n / Vibe Code / Veo 3 • TP.HCM & Remote
+          </p>
+          <div class="brand-links">
+            <a href="https://tonykosuy.github.io/portfolio/" target="_blank" class="brand-link-chip"><i class="fa-solid fa-globe"></i> Portfolio Live</a>
+            <a href="assets/CV_Phuc_Nguyen_EN.pdf" target="_blank" class="brand-link-chip"><i class="fa-solid fa-file-pdf"></i> CV Gốc (EN)</a>
+            <a href="assets/CV_Phuc_Nguyen_VI.pdf" target="_blank" class="brand-link-chip"><i class="fa-solid fa-file-pdf"></i> CV Gốc (VI)</a>
+            <span class="brand-link-chip"><i class="fa-solid fa-envelope"></i> tonyphucnguyen.work@gmail.com</span>
+            <span class="brand-link-chip"><i class="fa-solid fa-phone"></i> VN: 0342381843 | QT (WhatsApp): +84342381843</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button class="btn btn-accent-bulk" onclick="openBulkModal()" id="btn-bulk-open">
+          <i class="fa-solid fa-paper-plane"></i> Gửi Hàng Loạt (<span id="hdr-bulk-count">0</span>)
+        </button>
+        <button class="btn btn-accent" onclick="liveScrapeInBrowser()" id="btn-live-scrape">
+          <i class="fa-solid fa-rotate"></i> Quét Job Live (API)
+        </button>
+        <button class="btn btn-glass" onclick="openCustomJobModal()">
+          <i class="fa-solid fa-plus"></i> Dán JD Bất Kỳ (/apply)
+        </button>
+        <button class="btn btn-glass" onclick="openAiGuardModal()">
+          <i class="fa-solid fa-shield-halved"></i> Anti-AI Guard
+        </button>
+        <button class="btn btn-glass" onclick="exportTrackerCSV()">
+          <i class="fa-solid fa-file-csv"></i> Xuất CSV
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN CONTENT ================= -->
+  <main class="main-wrap">
+
+    <!-- KPI Funnel Strip -->
+    <section class="kpi-grid" id="kpi-strip">
+      <div class="kpi-card">
+        <div>
+          <div class="kpi-label">Tổng đầu việc</div>
+          <div class="kpi-num" id="kpi-total">0</div>
+          <div class="kpi-sub">8 lĩnh vực trọng tâm</div>
+        </div>
+        <div class="kpi-icon" style="background:#e0f2fe;color:#0284c7;"><i class="fa-solid fa-briefcase"></i></div>
+      </div>
+      <div class="kpi-card">
+        <div>
+          <div class="kpi-label">Remote VN & Quốc tế</div>
+          <div class="kpi-num" id="kpi-remote">0</div>
+          <div class="kpi-sub">Onsite chỉ TP.HCM</div>
+        </div>
+        <div class="kpi-icon" style="background:#ede9fe;color:#7c3aed;"><i class="fa-solid fa-earth-asia"></i></div>
+      </div>
+      <div class="kpi-card">
+        <div>
+          <div class="kpi-label">Độ Fit ≥ 90%</div>
+          <div class="kpi-num" id="kpi-highfit">0</div>
+          <div class="kpi-sub">Khớp CV & career-ops ATS</div>
+        </div>
+        <div class="kpi-icon" style="background:#d1fae5;color:#059669;"><i class="fa-solid fa-bullseye"></i></div>
+      </div>
+      <div class="kpi-card">
+        <div>
+          <div class="kpi-label">Đã duyệt chờ gửi</div>
+          <div class="kpi-num" id="kpi-approved">0</div>
+          <div class="kpi-sub">Sẵn sàng gửi hàng loạt</div>
+        </div>
+        <div class="kpi-icon" style="background:#fef3c7;color:#d97706;"><i class="fa-solid fa-list-check"></i></div>
+      </div>
+      <div class="kpi-card">
+        <div>
+          <div class="kpi-label">Đã bấm gửi Mail</div>
+          <div class="kpi-num" id="kpi-sent">0</div>
+          <div class="kpi-sub">Lưu tự động trong tracker</div>
+        </div>
+        <div class="kpi-icon" style="background:#dbeafe;color:#1d4ed8;"><i class="fa-solid fa-paper-plane"></i></div>
+      </div>
+      <div class="kpi-card">
+        <div>
+          <div class="kpi-label">Phỏng vấn / Offer</div>
+          <div class="kpi-num" id="kpi-interview">0</div>
+          <div class="kpi-sub">Cập nhật kết quả</div>
+        </div>
+        <div class="kpi-icon" style="background:#fce7f3;color:#be185d;"><i class="fa-solid fa-trophy"></i></div>
+      </div>
+    </section>
+
+    <!-- View Mode Switch + 8 Domain Categories + Search Filters -->
+    <section class="toolbar-panel">
+      <div class="view-tabs-row">
+        <div class="view-tabs">
+          <button class="view-tab-btn active" data-view="cards" onclick="switchMainView('cards', this)">
+            <i class="fa-solid fa-grip"></i> Khám phá Job & Hình ảnh
+            <span class="count-pill" id="tab-count-all">0</span>
+          </button>
+          <button class="view-tab-btn" data-view="queue" onclick="switchMainView('queue', this)">
+            <i class="fa-solid fa-bolt"></i> Hàng đợi & Gửi Hàng Loạt
+            <span class="count-pill" id="tab-count-queue">0</span>
+          </button>
+          <button class="view-tab-btn" data-view="radar" onclick="switchMainView('radar', this)">
+            <i class="fa-solid fa-radar"></i> Radar Nguồn (FB / LinkedIn / VN / QT)
+          </button>
+          <button class="view-tab-btn" data-view="tracker" onclick="switchMainView('tracker', this)">
+            <i class="fa-solid fa-table-list"></i> Bảng Theo dõi Pipeline (/html-report)
+            <span class="count-pill" id="tab-count-sent">0</span>
+          </button>
+        </div>
+
+        <div style="font-size:0.78rem;color:var(--text-muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span><i class="fa-solid fa-shield-check" style="color:var(--success)"></i> <strong>WP:AISIGNS + career-ops</strong></span>
+          <button class="btn btn-outline btn-sm" onclick="selectAllFilteredWithEmail()">
+            <i class="fa-solid fa-check-double"></i> Chọn tất cả đang lọc
+          </button>
+        </div>
+      </div>
+
+      <!-- 8 Domain Category Tabs -->
+      <div class="category-pills" id="category-pills"></div>
+
+      <!-- Search & Filters -->
+      <div class="filters-row">
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="search-input" placeholder="Tìm theo chức danh, công ty, kỹ năng (VD: gia sư, trợ giảng, tuyển sinh, Veo 3, n8n, chứng khoán, TP.HCM, remote)..." oninput="renderAll()">
+        </div>
+
+        <select id="filter-market" class="filter-select" onchange="renderAll()">
+          <option value="all">🌍 Tất cả nguồn & khu vực</option>
+          <option value="hcmc_onsite">📍 Onsite / Part-time chỉ TP.HCM</option>
+          <option value="remote_global">🌍 Remote Quốc tế (USD)</option>
+          <option value="remote_vn">🇻🇳 Remote Việt Nam / Hybrid TP.HCM</option>
+          <option value="freelance">💻 Freelance & Dự án Ngắn hạn</option>
+          <option value="parttime">⏳ Part-time Linh hoạt</option>
+          <option value="intern">🎓 Thực tập (Internship)</option>
+          <option value="enterprise_ats">🏛️ Tập đoàn Lớn (Enterprise ATS)</option>
+          <option value="fb_linkedin">📱 Nguồn FB Group & LinkedIn</option>
+          <option value="has_email">⚡ Có sẵn Email HR gửi ngay</option>
+          <option value="live_only">🟢 Vừa Scrape Live từ API</option>
+        </select>
+
+        <select id="filter-status" class="filter-select" onchange="renderAll()">
+          <option value="all">📌 Tất cả trạng thái</option>
+          <option value="new">🆕 Chưa xử lý</option>
+          <option value="approved">☑️ Đã duyệt chờ gửi</option>
+          <option value="sent">✉️ Đã bấm gửi Mail</option>
+          <option value="interview">🎯 Phỏng vấn / Offer</option>
+          <option value="skipped">🗑️ Đã bỏ qua</option>
+        </select>
+
+        <select id="sort-by" class="filter-select" onchange="renderAll()">
+          <option value="fit_desc">Sắp xếp: Độ Fit % cao nhất</option>
+          <option value="email_first">Sắp xếp: Có Email HR gửi trước</option>
+          <option value="ats_first">Sắp xếp: ATS Coverage % cao nhất</option>
+          <option value="live_first">Sắp xếp: Job Scrape Live mới nhất</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- VIEW 1: VISUAL JOB CARDS GRID -->
+    <section id="view-cards">
+      <div class="jobs-grid" id="jobs-grid"></div>
+    </section>
+
+    <!-- VIEW 2: RAPID SEMI-AUTO EMAIL QUEUE & BATCH -->
+    <section id="view-queue" style="display:none;">
+      <div class="queue-panel">
+        <div class="queue-header">
+          <div>
+            <h2 style="margin:0;font-size:1.05rem;">⚡ Chế độ Bán Tự Động: Kiểm tra Mail & Gửi Hàng Loạt</h2>
+            <p style="margin:3px 0 0;font-size:0.82rem;color:var(--text-muted);">
+              Chọn nhiều job cần gửi hoặc lọc các job <strong>có sẵn Email HR</strong>, chỉnh phong cách Tiêu đề tự nhiên không bị AI rồi bấm <strong>Gửi Hàng Loạt</strong>.
+            </p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" onclick="approveTopFitsWithEmail()">
+              <i class="fa-solid fa-check-double"></i> Tự động chọn Job Fit ≥ 90% có Email
+            </button>
+            <button class="btn btn-accent-bulk btn-sm" onclick="openBulkModal()">
+              <i class="fa-solid fa-paper-plane"></i> Mở Hộp Gửi Hàng Loạt
+            </button>
+          </div>
+        </div>
+        <div class="queue-table-wrap">
+          <table class="queue-table">
+            <thead>
+              <tr>
+                <th style="width:42px;">Chọn</th>
+                <th>Công việc & Công ty</th>
+                <th>Độ Fit / ATS</th>
+                <th>Tiêu đề (Non-AI) & Mail soạn sẵn</th>
+                <th>Hành động (Bấm Gửi)</th>
+              </tr>
+            </thead>
+            <tbody id="queue-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: MULTI-PORTAL SOURCE RADAR (FB GROUPS, LINKEDIN, VN & GLOBAL PORTALS) -->
+    <section id="view-radar" class="source-radar-wrap" style="display:none;">
+      <div class="source-radar-banner">
+        <h2 style="margin:0 0 6px 0;font-size:1.12rem;"><i class="fa-solid fa-satellite-dish" style="color:#38bdf8;"></i> Radar Quét Nguồn Việc Làm Đa Kênh (Lớn đến Nhỏ, FB Group, LinkedIn, Google X-Ray)</h2>
+        <p style="margin:0;font-size:0.84rem;color:#cbd5e1;line-height:1.5;">
+          Mở nhanh các luồng tìm việc theo đúng tiêu chí của bạn (TP.HCM Onsite Part-time, Remote Quốc tế, Freelance, Gia sư Cấp 1-2, AI Video/Vibe Code). Khi thấy tin phù hợp có Email HR hoặc JD hay, copy dán ngay vào nút <strong>"Dán JD Bất Kỳ (/apply)"</strong> để phân tích ATS & gộp vào hàng đợi gửi hàng loạt!
+        </p>
+      </div>
+      <div class="source-radar-grid" id="source-radar-grid"></div>
+    </section>
+
+    <!-- VIEW 4: PIPELINE TRACKER TABLE -->
+    <section id="view-tracker" style="display:none;">
+      <div class="queue-panel">
+        <div class="queue-header">
+          <div>
+            <h2 style="margin:0;font-size:1.05rem;">📊 Bảng Theo dõi Ứng tuyển (Pipeline Report)</h2>
+            <p style="margin:3px 0 0;font-size:0.82rem;color:var(--text-muted);">
+              Lưu tự động trong trình duyệt (LocalStorage) và xuất ra <code>job_search_tracker.csv</code>.
+            </p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline btn-sm" onclick="exportTrackerCSV()"><i class="fa-solid fa-download"></i> Tải CSV</button>
+            <button class="btn btn-danger-soft btn-sm" onclick="resetTrackerStatuses()"><i class="fa-solid fa-rotate-left"></i> Reset trạng thái</button>
+          </div>
+        </div>
+        <div class="queue-table-wrap">
+          <table class="queue-table">
+            <thead>
+              <tr>
+                <th>Công ty & Vị trí</th>
+                <th>Lĩnh vực</th>
+                <th>Hình thức / ATS</th>
+                <th>Fit %</th>
+                <th>Trạng thái</th>
+                <th>Ghi chú / Ngày gửi</th>
+                <th>Mở lại Studio</th>
+              </tr>
+            </thead>
+            <tbody id="tracker-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Floating Bulk Action Bar -->
+  <div class="bulk-floating-bar" id="bulk-floating-bar">
+    <span class="bulk-floating-count" id="bulk-float-count">0 job đang chọn</span>
+    <button class="btn btn-glass btn-sm" onclick="selectAllFilteredWithEmail()">Chọn tất cả đang lọc</button>
+    <button class="btn btn-glass btn-sm" onclick="clearSelection()">Bỏ chọn</button>
+    <button class="btn btn-accent-bulk btn-sm" onclick="openBulkModal()">
+      <i class="fa-solid fa-paper-plane"></i> Soạn & Gửi Hàng Loạt
+    </button>
+  </div>
+
+  <!-- ================= MODAL 1: 4-TAB JOB OPTIMIZATION STUDIO (/apply) ================= -->
+  <div class="modal-backdrop" id="studio-backdrop" onclick="if(event.target===this) closeStudio()">
+    <div class="studio-modal">
+      <div class="studio-header">
+        <div>
+          <h2 id="st-title">Tối ưu Hồ sơ & Gửi Mail</h2>
+          <div class="studio-sub" id="st-subtitle">Company • Location • Fit Score</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="btn btn-accent btn-sm" onclick="toggleDecisionFromModal()" id="st-approve-btn">
+            <i class="fa-solid fa-check"></i> Duyệt gửi
+          </button>
+          <button class="btn btn-glass btn-sm" onclick="closeStudio()"><i class="fa-solid fa-xmark"></i> Đóng</button>
+        </div>
+      </div>
+
+      <div class="studio-tabs">
+        <button class="studio-tab active" data-tab="fit" onclick="switchStudioTab('fit', this)">
+          <i class="fa-solid fa-chart-pie"></i> 1. Đánh giá Fit & career-ops ATS
+        </button>
+        <button class="studio-tab" data-tab="cv" onclick="switchStudioTab('cv', this)">
+          <i class="fa-solid fa-file-invoice"></i> 2. CV Tối ưu Theo Job (Chuẩn Gốc + QR Portfolio)
+        </button>
+        <button class="studio-tab" data-tab="cl" onclick="switchStudioTab('cl', this)">
+          <i class="fa-solid fa-pen-nib"></i> 3. Cover Letter (Anti-AI Check)
+        </button>
+        <button class="studio-tab" data-tab="email" onclick="switchStudioTab('email', this)">
+          <i class="fa-solid fa-envelope-open-text"></i> 4. Email & Tối ưu Tiêu đề Tự nhiên
+        </button>
+      </div>
+
+      <div class="studio-body">
+        <!-- TAB 1: FIT & REVIEWER & ATS -->
+        <div class="tab-pane active" id="pane-fit">
+          <div class="two-col-grid">
+            <div>
+              <div class="panel-card">
+                <h3><i class="fa-solid fa-gauge-high" style="color:var(--primary)"></i> Điểm phù hợp 5 chiều (ai-job-search Rubric)</h3>
+                <div id="st-dimensions"></div>
+              </div>
+              <div class="panel-card">
+                <h3><i class="fa-solid fa-robot" style="color:#1d4ed8"></i> Phân tích Đảo ngược Bộ Lọc AI / ATS (career-ops)</h3>
+                <div id="st-ats-summary"></div>
+              </div>
+              <div class="panel-card">
+                <h3><i class="fa-solid fa-check-double" style="color:var(--success)"></i> Bằng chứng thật khớp từ CV & Portfolio</h3>
+                <ul id="st-evidence" style="margin:0;padding-left:18px;font-size:0.85rem;color:#334155;"></ul>
+              </div>
+              <div class="panel-card">
+                <h3><i class="fa-solid fa-scale-balanced" style="color:var(--warning)"></i> Khoảng trống trung thực (Honest Gap - Không bịa)</h3>
+                <p id="st-gap" style="margin:0;font-size:0.85rem;color:#334155;"></p>
+              </div>
+            </div>
+            <div>
+              <div class="panel-card">
+                <h3><i class="fa-solid fa-image" style="color:var(--primary)"></i> Hình ảnh Job Snapshot đã Scrap</h3>
+                <img id="st-snapshot-img" src="" alt="Job Snapshot" style="width:100%;border-radius:10px;border:1px solid var(--border);cursor:pointer;" onclick="openLightbox(this.src)">
+                <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                  <a id="st-orig-link" href="#" target="_blank" class="btn btn-outline btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Mở trang tuyển dụng gốc</a>
+                  <button class="btn btn-primary btn-sm" onclick="switchStudioTabByName('cv')"><i class="fa-solid fa-wand-magic-sparkles"></i> Mở CV Tối Ưu (Chuẩn Gốc + QR)</button>
+                </div>
+              </div>
+              <div class="panel-card">
+                <h3><i class="fa-solid fa-user-tie" style="color:var(--purple)"></i> Góc nhìn Nhà Tuyển Dụng (Reviewer Agent)</h3>
+                <ul id="st-critique" style="margin:0;padding-left:18px;font-size:0.85rem;color:#334155;"></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: JOB-TAILORED CV (CANVA ORIGINAL LAYOUT + PORTFOLIO QR + 7 EXACT HEADERS) -->
+        <div class="tab-pane" id="pane-cv">
+          <div id="cv-ats-reverse-panel" class="ats-coverage-box"></div>
+
+          <div class="cv-controls-bar">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <span style="font-size:0.8rem;font-weight:700;color:var(--text-muted);">Ngôn ngữ CV:</span>
+              <button class="btn btn-sm btn-primary" id="cv-lang-en" onclick="setCvLang('en')">🇬🇧 CV Tiếng Anh (Job Quốc tế • WhatsApp +84342381843)</button>
+              <button class="btn btn-sm btn-outline" id="cv-lang-vi" onclick="setCvLang('vi')">🇻🇳 CV Tiếng Việt (Job VN • SĐT 0342381843)</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <button class="btn btn-sm btn-outline" onclick="checkCvAiSigns()"><i class="fa-solid fa-shield-halved"></i> Kiểm tra Anti-AI</button>
+              <button class="btn btn-sm btn-success" onclick="printTailoredCV()"><i class="fa-solid fa-print"></i> Xuất / In PDF CV Đã Tối Ưu (A4)</button>
+              <a id="cv-download-pdf-btn" href="assets/CV_Phuc_Nguyen_EN.pdf" download="CV_Phuc_Nguyen_EN.pdf" class="btn btn-sm btn-primary">
+                <i class="fa-solid fa-file-arrow-down"></i> Tải PDF CV Gốc
+              </a>
+            </div>
+          </div>
+
+          <div id="cv-ai-status" class="ai-guard-banner ai-guard-pass">
+            <span><i class="fa-solid fa-circle-check"></i> CV giữ đúng bố cục Canva gốc (chỉ dùng 7 header chuẩn, gắn QR + hyperlink Portfolio &amp; email <code>tonyphucnguyen.work@gmail.com</code>). Bấm vào chữ để chỉnh sửa trước khi xuất PDF.</span>
+            <span id="cv-ats-check" style="font-size:0.78rem;font-weight:700;">ATS Layer: PASS (Text selectable + QR Link)</span>
+          </div>
+
+          <div id="cv-a4-container" class="a4-sheet cv-tpl-visual"></div>
+        </div>
+
+        <!-- TAB 3: COVER LETTER -->
+        <div class="tab-pane" id="pane-cl">
+          <div class="cv-controls-bar">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <span style="font-size:0.8rem;font-weight:700;color:var(--text-muted);">Ngôn ngữ Cover Letter:</span>
+              <button class="btn btn-sm btn-primary" id="cl-lang-en" onclick="setClLang('en')">🇬🇧 English</button>
+              <button class="btn btn-sm btn-outline" id="cl-lang-vi" onclick="setClLang('vi')">🇻🇳 Tiếng Việt</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-sm btn-outline" onclick="cleanClAiSigns()"><i class="fa-solid fa-broom"></i> Tự động khử dấu hiệu AI</button>
+              <button class="btn btn-sm btn-outline" onclick="copyTextById('cl-textarea', 'Đã copy Cover Letter!')"><i class="fa-solid fa-copy"></i> Copy Cover Letter</button>
+              <button class="btn btn-sm btn-success" onclick="printCoverLetter()"><i class="fa-solid fa-print"></i> In / Lưu PDF Cover Letter</button>
+            </div>
+          </div>
+
+          <div id="cl-ai-banner" class="ai-guard-banner ai-guard-pass"></div>
+          <textarea id="cl-textarea" class="editor-textarea" oninput="onClEdit()"></textarea>
+          <div id="print-cl-sheet" class="print-cl-sheet"></div>
+        </div>
+
+        <!-- TAB 4: EMAIL DISPATCHER + NON-AI SUBJECT OPTIMIZER -->
+        <div class="tab-pane" id="pane-email">
+          <div class="two-col-grid">
+            <div>
+              <div class="panel-card">
+                <h3><i class="fa-solid fa-envelope" style="color:var(--primary)"></i> Email Soạn Sẵn & Tiêu Đề Tự Nhiên (Không bị AI/Spam)</h3>
+                <div class="form-field">
+                  <label>Gửi tới (Email HR / Tuyển dụng):</label>
+                  <input type="text" id="em-to" class="form-input" placeholder="VD: tuyendung@company.com (hoặc dán từ bài FB/LinkedIn)" oninput="saveEmailEdits()">
+                </div>
+
+                <div class="subject-variants-box">
+                  <div style="font-size:0.78rem;font-weight:700;color:#0369a1;">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Chọn nhanh Phong cách Tiêu đề Tự nhiên (Bỏ ngoặc vuông <code>[...]</code> & dấu <code>|</code> robot):
+                  </div>
+                  <div class="subject-style-pills" id="em-subject-style">
+                    <button type="button" class="subj-style-btn active" id="subj-btn-hr_natural" onclick="applySubjectStyle('hr_natural')">👔 Chuẩn HR Việt Nam / QT</button>
+                    <button type="button" class="subj-style-btn" id="subj-btn-proof_direct" onclick="applySubjectStyle('proof_direct')">📊 Nêu thẳng Minh chứng / Con số</button>
+                    <button type="button" class="subj-style-btn" id="subj-btn-fb_hcm_parttime" onclick="applySubjectStyle('fb_hcm_parttime')">📍 Phản hồi bài đăng FB / Part-time</button>
+                    <button type="button" class="subj-style-btn" id="subj-btn-short_casual" onclick="applySubjectStyle('short_casual')">⚡ Ngắn gọn như Người thật</button>
+                  </div>
+                </div>
+
+                <div class="form-field">
+                  <label>Tiêu đề Email (Subject - đã kiểm tra Anti-AI):</label>
+                  <input type="text" id="em-subject" class="form-input" oninput="saveEmailEdits()">
+                </div>
+                <div class="form-field">
+                  <label>Nội dung Email (Đã gắn link Portfolio & khử văn phong AI):</label>
+                  <div id="em-ai-banner" class="ai-guard-banner ai-guard-pass" style="margin-bottom:8px;"></div>
+                  <textarea id="em-body" class="editor-textarea" style="min-height:220px;" oninput="saveEmailEdits()"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="panel-card" style="background:#f0f9ff;border-color:#bae6fd;">
+                <h3><i class="fa-solid fa-paper-plane" style="color:var(--primary-dark)"></i> Quyết định Bán Tự Động</h3>
+                <p style="font-size:0.83rem;color:#334155;margin-top:0;">
+                  Quy trình chuẩn <strong>ai-job-search</strong>: Hồ sơ & Tiêu đề đã tối ưu sẵn. <strong>Bạn là người duyệt cuối cùng và bấm gửi.</strong>
+                </p>
+
+                <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:16px;">
+                  <button class="btn btn-primary" onclick="sendViaGmail()">
+                    <i class="fa-brands fa-google"></i> Bấm Gửi Qua Gmail Web (Soạn sẵn Toàn bộ)
+                  </button>
+                  <button class="btn btn-accent-bulk" onclick="addCurrentJobAndOpenBulk()">
+                    <i class="fa-solid fa-layer-group"></i> Đưa Job Này Vào Hàng Gửi Hàng Loạt
+                  </button>
+                  <button class="btn btn-outline" onclick="sendViaMailto()">
+                    <i class="fa-solid fa-envelope"></i> Mở Ứng dụng Mail Mặc định (mailto:)
+                  </button>
+                  <button class="btn btn-outline" onclick="copyFullEmail()">
+                    <i class="fa-solid fa-copy"></i> Copy Toàn Bộ (Email + Subject + Nội dung)
+                  </button>
+                  <a id="em-portal-link" href="#" target="_blank" class="btn btn-outline">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> Mở Cổng Nộp Đơn Công Ty (Kèm Copy Cover Letter)
+                  </a>
+                </div>
+
+                <div class="form-field">
+                  <label>Cập nhật Trạng thái Pipeline:</label>
+                  <select id="st-status-select" class="filter-select" style="width:100%;" onchange="updateCurrentJobStatus(this.value)">
+                    <option value="new">🆕 Chưa xử lý</option>
+                    <option value="approved">☑️ Đã duyệt - Chờ gửi Mail</option>
+                    <option value="sent">✉️ Đã bấm gửi Mail / Nộp đơn</option>
+                    <option value="interview">🎯 Đã được gọi Phỏng vấn</option>
+                    <option value="offer">🏆 Đã nhận Offer</option>
+                    <option value="skipped">🗑️ Bỏ qua (Không phù hợp)</option>
+                  </select>
+                </div>
+
+                <div class="form-field">
+                  <label>Ghi chú cá nhân (Tên HR, lịch hẹn, lưu ý đính kèm file PDF CV):</label>
+                  <textarea id="st-notes" class="form-input" rows="3" placeholder="VD: Đính kèm file PDF CV vừa xuất ở Tab 2..." oninput="saveJobNotes(this.value)"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL 2: CUSTOM JD IMPORTER (/apply) ================= -->
+  <div class="modal-backdrop" id="custom-modal-backdrop" onclick="if(event.target===this) closeCustomJobModal()">
+    <div class="studio-modal" style="max-width:760px;">
+      <div class="studio-header">
+        <div>
+          <h2><i class="fa-solid fa-plus-circle"></i> Dán Job Bất Kỳ Để Tối Ưu (/apply & career-ops ATS)</h2>
+          <div class="studio-sub">Dán tin từ Facebook Group, LinkedIn, TopCV, YBox, Upwork... để phân tích ATS, tối ưu CV/Cover Letter & đưa vào hàng gửi hàng loạt</div>
+        </div>
+        <button class="btn btn-glass btn-sm" onclick="closeCustomJobModal()"><i class="fa-solid fa-xmark"></i> Đóng</button>
+      </div>
+      <div class="studio-body">
+        <div class="form-field">
+          <label>Tên Vị trí (Job Title) *</label>
+          <input type="text" id="cj-title" class="form-input" placeholder="VD: Gia sư Toán Lý Cấp 2 TP.HCM / AI Video Vibe Code Intern / Data Analyst">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-field">
+            <label>Tên Công ty / Người tuyển *</label>
+            <input type="text" id="cj-company" class="form-input" placeholder="VD: MindX / SSI / Anh Minh (FB Group)">
+          </div>
+          <div class="form-field">
+            <label>Email HR (nếu có)</label>
+            <input type="email" id="cj-email" class="form-input" placeholder="VD: hr@company.com">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+          <div class="form-field">
+            <label>Lĩnh vực (8 nhóm)</label>
+            <select id="cj-category" class="filter-select" style="width:100%;">
+              <option value="ai_vibe">🤖 AI Gen, Vibe Code & AI Video</option>
+              <option value="tutor_ta">🎓 Trợ giảng & Gia sư (Cấp 1, 2, IELTS, MOS)</option>
+              <option value="admissions_sale">☎️ Tư vấn Tuyển sinh & EdTech</option>
+              <option value="freelance_gig">💻 Freelance & Dự án Ngắn hạn</option>
+              <option value="assistant_pm">📋 Trợ lý, Vận hành, PM & HR</option>
+              <option value="stock">📈 Chứng khoán & Đầu tư</option>
+              <option value="finance">💰 Tài chính, Data & Fintech</option>
+              <option value="sales_esg">🌍 Kinh doanh QT, E-Com & ESG</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Hình thức & Địa điểm</label>
+            <select id="cj-workmode" class="filter-select" style="width:100%;">
+              <option value="Onsite Part-time TP.HCM">📍 Onsite Part-time TP.HCM</option>
+              <option value="Thực tập TP.HCM">🎓 Thực tập TP.HCM</option>
+              <option value="Remote Quốc tế">🌍 Remote Quốc tế</option>
+              <option value="Remote Part-time">🇻🇳 Remote Part-time</option>
+              <option value="Freelance Remote">💻 Freelance Remote</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Mức lương / Trợ cấp</label>
+            <input type="text" id="cj-salary" class="form-input" placeholder="VD: 5-8 triệu / 150k-250k/buổi / $500">
+          </div>
+        </div>
+        <div class="form-field">
+          <label>Link trang tuyển dụng / Bài viết FB / LinkedIn (URL)</label>
+          <input type="url" id="cj-url" class="form-input" placeholder="https://...">
+        </div>
+        <div class="form-field">
+          <label>Dán toàn bộ Mô tả công việc (Job Description) *</label>
+          <textarea id="cj-desc" class="editor-textarea" style="min-height:140px;" placeholder="Paste yêu cầu công việc, kỹ năng ATS, lưu ý bài đăng vào đây..."></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button class="btn btn-outline" onclick="closeCustomJobModal()">Hủy</button>
+          <button class="btn btn-primary" onclick="submitCustomJob()"><i class="fa-solid fa-wand-magic-sparkles"></i> Phân tích ATS Fit & Tạo Bộ Hồ Sơ Ngay</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL 3: WP:AISIGNS + CAREER-OPS ANTI-AI INSPECTOR ================= -->
+  <div class="modal-backdrop" id="aiguard-backdrop" onclick="if(event.target===this) closeAiGuardModal()">
+    <div class="studio-modal" style="max-width:860px;">
+      <div class="studio-header">
+        <div>
+          <h2><i class="fa-solid fa-shield-halved"></i> Bộ Lọc Chống Dấu Hiệu AI Writing (WP:AISIGNS + career-ops cv-voice)</h2>
+          <div class="studio-sub">Kết hợp từ Wikipedia "Signs of AI writing" + danh sách cụm từ sáo rỗng của repo career-ops</div>
+        </div>
+        <button class="btn btn-glass btn-sm" onclick="closeAiGuardModal()"><i class="fa-solid fa-xmark"></i> Đóng</button>
+      </div>
+      <div class="studio-body">
+        <div class="panel-card">
+          <h3><i class="fa-solid fa-ban" style="color:var(--danger)"></i> 6 Nhóm Dấu Hiệu Bị Chặn Tự Động Trong Tiêu đề, CV, Cover Letter & Email</h3>
+          <ul style="margin:0;padding-left:18px;font-size:0.84rem;color:#334155;line-height:1.6;">
+            <li><strong>1. Từ vựng AI rập khuôn (WP:AIVOCAB):</strong> Cấm tuyệt đối <code>delve, tapestry, testament, underscore, pivotal, crucial, vibrant, intricate, meticulous, garner, bolster, foster, interplay, landscape, realm, symphony, beacon, embark, unwavering, multifaceted, showcase, highlight, emphasize, leverage, streamline, spearhead, orchestrate</code> và tiếng Việt: <em>đóng vai trò then chốt, minh chứng sống động, bức tranh toàn cảnh, khẳng định vị thế...</em></li>
+            <li><strong>2. Cụm từ HR sáo rỗng (career-ops cv-voice.mjs):</strong> Cấm <code>passionate about, detail-oriented, team player, proven track record, bridge the gap, dynamic, synergy, cutting-edge, driven professional, hands-on experience in, fast-paced environment</code>.</li>
+            <li><strong>3. Phóng đại tầm vóc & đối lập giả (WP:AILEGACY + WP:AIPARALLEL):</strong> Cấm <em>"stands as a testament", "Not only X, but also Y", "Không chỉ... mà còn..."</em>. Thay bằng số liệu thật (10% ROI / $5,000 / 3 tháng, 113+ thành viên, 30+ triệu VNĐ, dạy 3 tháng).</li>
+            <li><strong>4. Tiêu đề Email tự nhiên (Non-AI Subject):</strong> Bỏ các tiêu đề dạng robot như <code>[Application] ... | ...</code> hoặc ALL-CAPS. Dùng câu tự nhiên kiểu <em>"Ứng tuyển Trợ giảng Tiếng Anh TP.HCM - Nguyễn Trần Tiến Phúc (IELTS 6.0)"</em> hoặc <em>"Application for Financial Data Intern - Phuc Nguyen (UEH / MOS Expert)"</em>.</li>
+            <li><strong>5. Kiểm tra Đảo ngược ATS (career-ops):</strong> Phân tích từ khóa JD chia 3 nhóm (Khớp trực tiếp / Có bằng chứng gián tiếp / Khoảng trống trung thực), dùng CV 1 cột sạch để vượt qua Workday, Greenhouse, Lever, TopCV AI.</li>
+          </ul>
+        </div>
+        <div class="panel-card">
+          <h3><i class="fa-solid fa-vial" style="color:var(--primary)"></i> Kiểm Tra Nhanh Đoạn Văn Bất Kỳ</h3>
+          <div id="guard-tester-banner" class="ai-guard-banner ai-guard-pass">Dán bất kỳ tiêu đề / CV / Cover Letter / Email nào vào bên dưới để soi dấu hiệu AI.</div>
+          <textarea id="guard-tester-input" class="editor-textarea" style="min-height:160px;" placeholder="Dán thử một đoạn văn tiếng Anh hoặc tiếng Việt..." oninput="runTesterAiCheck()"></textarea>
+          <div style="margin-top:10px;display:flex;gap:8px;">
+            <button class="btn btn-outline btn-sm" onclick="cleanTesterAiSigns()"><i class="fa-solid fa-broom"></i> Làm sạch dấu hiệu AI</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL 4: BULK EMAIL DISPATCHER ================= -->
+  <div class="modal-backdrop" id="bulk-backdrop" onclick="if(event.target===this) closeBulkModal()">
+    <div class="bulk-modal">
+      <div class="studio-header">
+        <div>
+          <h2><i class="fa-solid fa-paper-plane"></i> Trình Gửi Email Hàng Loạt Thông Minh (Non-AI Subject + Anti-AI Guard)</h2>
+          <div class="studio-sub">Chỉnh tiêu đề hàng loạt theo văn phong tự nhiên, kiểm tra nhanh từng email rồi gửi theo đợt (Gmail Web) hoặc gửi trực tiếp kèm PDF CV qua Local Bulk Mailer</div>
+        </div>
+        <button class="btn btn-glass btn-sm" onclick="closeBulkModal()"><i class="fa-solid fa-xmark"></i> Đóng</button>
+      </div>
+
+      <div class="bulk-body">
+        <!-- Toolbar 1: Batch Selection & Subject Style Switcher -->
+        <div class="bulk-toolbar">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <span style="font-size:0.8rem;font-weight:700;color:#0f172a;">Đổi Tiêu đề Hàng loạt:</span>
+            <button class="btn btn-outline btn-sm" onclick="bulkApplySubjectStyle('hr_natural')">👔 Chuẩn HR</button>
+            <button class="btn btn-outline btn-sm" onclick="bulkApplySubjectStyle('proof_direct')">📊 Nêu Con số / Proof</button>
+            <button class="btn btn-outline btn-sm" onclick="bulkApplySubjectStyle('fb_hcm_parttime')">📍 Kiểu FB / Part-time</button>
+            <button class="btn btn-outline btn-sm" onclick="bulkApplySubjectStyle('short_casual')">⚡ Ngắn gọn Tự nhiên</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" onclick="loadAllEmailJobsIntoBulk()"><i class="fa-solid fa-bolt"></i> Nạp thêm tất cả Job có Email HR</button>
+            <button class="btn btn-outline btn-sm" onclick="cleanAllBulkAiSigns()"><i class="fa-solid fa-broom"></i> Khử AI toàn bộ Batch</button>
+            <button class="btn btn-outline btn-sm" onclick="exportBulkMailMergeCSV()"><i class="fa-solid fa-file-csv"></i> Xuất CSV Mail Merge</button>
+          </div>
+        </div>
+
+        <!-- Mode A + Mode B Controls -->
+        <div class="two-col-grid" style="margin-bottom:12px;">
+          <div class="panel-card" style="background:#f0fdf4;border-color:#bbf7d0;margin-bottom:0;">
+            <h3 style="margin-top:0;color:#166534;"><i class="fa-brands fa-google"></i> Cách 1: Gửi Hàng Loạt qua Gmail Web (Mở theo đợt, An toàn Popup)</h3>
+            <p style="font-size:0.79rem;color:#14532d;margin:0 0 10px 0;">
+              Không cần mật khẩu. Hệ thống mở các tab soạn Gmail đã điền sẵn <strong>Người nhận + Tiêu đề Non-AI + Nội dung</strong> theo từng đợt (5 tab/lần) để bạn kiểm tra, thả file PDF CV và bấm Send cực nhanh.
+            </p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <button class="btn btn-success btn-sm" onclick="launchGmailWave(0, 5)">
+                <i class="fa-solid fa-rocket"></i> Mở Đợt 1 (5 Email đầu tiên)
+              </button>
+              <button class="btn btn-outline btn-sm" onclick="launchGmailWave(5, 10)">
+                <i class="fa-solid fa-forward"></i> Mở Đợt 2 (Email 6-10)
+              </button>
+              <button class="btn btn-outline btn-sm" onclick="markBulkBatchAsSent()">
+                <i class="fa-solid fa-check"></i> Đánh dấu Đã gửi tất cả Batch
+              </button>
+            </div>
+          </div>
+
+          <div class="bulk-smtp-box" style="margin-bottom:0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+              <h3 style="margin:0;font-size:0.9rem;color:#1e3a8a;"><i class="fa-solid fa-server"></i> Cách 2: Gửi Tự động Kèm PDF CV qua <code>bulk_mailer.py</code> (Gmail SMTP)</h3>
+              <span id="smtp-health-badge" class="badge" style="background:#e2e8f0;color:#334155;">Chưa kiểm tra localhost:8787</span>
+            </div>
+            <div class="bulk-smtp-grid">
+              <div>
+                <label>Gmail của bạn:</label>
+                <input type="email" id="smtp-sender" value="tonyphucnguyen.work@gmail.com">
+              </div>
+              <div>
+                <label>Gmail App Password (16 ký tự):</label>
+                <input type="password" id="smtp-app-pass" placeholder="xxxx xxxx xxxx xxxx">
+              </div>
+              <div>
+                <label>Đính kèm CV PDF:</label>
+                <select id="smtp-attach-cv">
+                  <option value="auto">Tự động theo ngôn ngữ Job (VI/EN)</option>
+                  <option value="vi">Luôn đính kèm CV Tiếng Việt (PDF)</option>
+                  <option value="en">Luôn đính kèm CV Tiếng Anh (PDF)</option>
+                  <option value="none">Không đính kèm file</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+              <button class="btn btn-outline btn-sm" onclick="checkLocalMailerHealth()"><i class="fa-solid fa-plug"></i> Kiểm tra Server (<code>:8787</code>)</button>
+              <button class="btn btn-outline btn-sm" onclick="sendBulkViaLocalServer('dry_run')"><i class="fa-solid fa-vial"></i> Kiểm tra Hợp lệ (Dry Run)</button>
+              <button class="btn btn-primary btn-sm" onclick="sendBulkViaLocalServer('test_self')"><i class="fa-solid fa-flask"></i> Gửi Thử vào Chính Mình</button>
+              <button class="btn btn-accent-bulk btn-sm" onclick="sendBulkViaLocalServer('live')"><i class="fa-solid fa-paper-plane"></i> GỬI THẬT TỚI TẤT CẢ HR</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Editable Queue Table -->
+        <div class="queue-table-wrap" style="max-height:310px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">
+          <table class="bulk-queue-table">
+            <thead>
+              <tr>
+                <th style="width:36px;">#</th>
+                <th style="width:190px;">Công ty & Vị trí</th>
+                <th style="width:205px;">Email HR (Có thể điền thêm)</th>
+                <th>Tiêu đề Email Tự nhiên (Sửa trực tiếp)</th>
+                <th style="width:95px;">Anti-AI</th>
+                <th style="width:90px;">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="bulk-table-tbody"></tbody>
+          </table>
+        </div>
+
+        <pre class="bulk-log-box" id="bulk-log-box"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= LIGHTBOX ZOOM (JOB SNAPSHOTS & PROJECT IMAGES) ================= -->
+  <div class="lightbox-backdrop" id="lightbox" onclick="this.classList.remove('open')">
+    <img id="lightbox-img" src="" alt="Preview">
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Data & Application Logic -->
+  <script src="data/jobs_data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
