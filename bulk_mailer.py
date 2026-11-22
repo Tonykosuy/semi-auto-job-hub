@@ -14,10 +14,14 @@ Usage:
 """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import mimetypes
 import os
+import re
 import smtplib
+import subprocess
+import threading
 import time
 from email.message import EmailMessage
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -34,6 +38,143 @@ CV_FILES = {
 DEFAULT_SMTP_HOST = "smtp.gmail.com"
 DEFAULT_SMTP_PORT = 587
 DEFAULT_SENDER = "tonyphucnguyen.work@gmail.com"
+
+MX_CACHE: Dict[str, List[str]] = {}
+VERIFY_CACHE: Dict[str, Dict[str, Any]] = {}
+CACHE_LOCK = threading.Lock()
+CONTROL_LOCK = threading.Lock()
+SMTP_LOCK = threading.Lock()
+
+BULK_CONTROL: Dict[str, bool] = {"paused": False, "stopped": False}
+SMTP_POOL: Dict[str, Any] = {"server": None, "sender": "", "password": "", "host": "", "port": 0}
+
+
+def get_mx_hosts(domain: str) -> List[str]:
+    """Query DNS MX records via 8.8.8.8, sorted by lowest preference."""
+    dom = (domain or "").strip().lower()
+    if not dom:
+        return []
+    with CACHE_LOCK:
+        if dom in MX_CACHE:
+            return MX_CACHE[dom]
+    creation_flags = 0x08000000 if os.name == "nt" else 0
+    mxs: List[str] = []
+    for cmd in (["nslookup", "-type=mx", dom, "8.8.8.8"], ["nslookup", "-type=mx", dom]):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=6, creationflags=creation_flags)
+            out = (r.stdout or "") + "\n" + (r.stderr or "")
+            pairs = re.findall(r"MX preference = (\d+),\s*mail exchanger = (\S+)", out, re.I)
+            if pairs:
+                mxs = [m.rstrip(".") for _, m in sorted((int(p), m) for p, m in pairs)]
+                break
+            plain = re.findall(r"mail exchanger = (\S+)", out, re.I)
+            if plain:
+                mxs = [x.rstrip(".") for x in plain]
+                break
+        except Exception:
+            continue
+    if mxs:
+        with CACHE_LOCK:
+            MX_CACHE[dom] = mxs
+    return mxs
+
+
+def verify_recipient_mailbox(email: str, force_refresh: bool = False) -> Dict[str, Any]:
+    """Verify via DNS MX + SMTP RCPT TO (with bogus-address check) that mailbox is real."""
+    addr = (email or "").strip()
+    if not re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", addr):
+        return {"email": addr, "ok": False, "verified": False, "status": "INVALID_SYNTAX", "code": 0, "mx": "", "detail": "Định dạng email không hợp lệ"}
+
+    key = addr.lower()
+    if not force_refresh:
+        with CACHE_LOCK:
+            cached = VERIFY_CACHE.get(key)
+            if cached:
+                return dict(cached)
+
+    dom = key.split("@", 1)[1]
+    mxs = get_mx_hosts(dom)
+    if not mxs:
+        res = {"email": addr, "ok": False, "verified": False, "status": "NO_MX", "code": 0, "mx": "", "detail": f"Tên miền {dom} không có máy chủ nhận thư (No MX)"}
+        with CACHE_LOCK:
+            VERIFY_CACHE[key] = res
+        return res
+
+    for mx in mxs[:2]:
+        try:
+            s = smtplib.SMTP(mx, 25, timeout=6)
+            s.ehlo("gmail.com")
+            s.mail(DEFAULT_SENDER)
+            code, raw_msg = s.rcpt(addr)
+            bogus_code, _ = s.rcpt(f"nonexistent_zz998877@{dom}")
+            try:
+                s.quit()
+            except Exception:
+                pass
+            msg_str = raw_msg.decode("utf-8", errors="ignore") if isinstance(raw_msg, bytes) else str(raw_msg)
+            if code == 250 and bogus_code != 250:
+                res = {"email": addr, "ok": True, "verified": True, "status": "VERIFIED_250", "code": code, "mx": mx, "detail": f"Hộp thư tồn tại thật ({mx})"}
+            elif code == 250:
+                res = {"email": addr, "ok": True, "verified": False, "status": "CATCHALL_250", "code": code, "mx": mx, "detail": f"Server bật Catch-All ({mx})"}
+            elif code >= 500:
+                res = {"email": addr, "ok": False, "verified": False, "status": "INVALID_550", "code": code, "mx": mx, "detail": f"Từ chối {code}: {msg_str[:80]}"}
+            else:
+                res = {"email": addr, "ok": False, "verified": False, "status": f"TEMP_{code}", "code": code, "mx": mx, "detail": msg_str[:80]}
+            if res["status"] in ("VERIFIED_250", "CATCHALL_250", "INVALID_550"):
+                with CACHE_LOCK:
+                    VERIFY_CACHE[key] = res
+            return res
+        except Exception:
+            continue
+
+    return {"email": addr, "ok": False, "verified": False, "status": "SMTP_TIMEOUT", "code": 0, "mx": mxs[0], "detail": f"Không phản hồi port 25 ({mxs[0]})"}
+
+
+def close_pooled_smtp() -> None:
+    """Safely close cached authenticated SMTP session."""
+    with SMTP_LOCK:
+        srv = SMTP_POOL.get("server")
+        SMTP_POOL.update({"server": None, "sender": "", "password": "", "host": "", "port": 0})
+        if srv is not None:
+            try:
+                srv.quit()
+            except Exception:
+                pass
+
+
+def _get_or_open_smtp(host: str, port: int, sender_email: str, app_password: str, force_new: bool = False) -> smtplib.SMTP:
+    """Reuse or open an authenticated TLS SMTP connection."""
+    with SMTP_LOCK:
+        srv = SMTP_POOL.get("server")
+        same_creds = (
+            srv is not None
+            and not force_new
+            and SMTP_POOL.get("sender") == sender_email
+            and SMTP_POOL.get("password") == app_password
+            and SMTP_POOL.get("host") == host
+            and SMTP_POOL.get("port") == port
+        )
+        if same_creds:
+            try:
+                code, _ = srv.noop()
+                if code == 250:
+                    return srv
+            except Exception:
+                pass
+        if srv is not None:
+            try:
+                srv.quit()
+            except Exception:
+                pass
+            SMTP_POOL["server"] = None
+
+        new_srv = smtplib.SMTP(host, port, timeout=20)
+        new_srv.ehlo()
+        new_srv.starttls()
+        new_srv.ehlo()
+        new_srv.login(sender_email, app_password)
+        SMTP_POOL.update({"server": new_srv, "sender": sender_email, "password": app_password, "host": host, "port": port})
+        return new_srv
 
 
 def check_cv_assets() -> Dict[str, Any]:
@@ -113,8 +254,17 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
     smtp_host = str(payload.get("smtp_host") or DEFAULT_SMTP_HOST).strip()
     smtp_port = int(payload.get("smtp_port") or DEFAULT_SMTP_PORT)
     attach_cv = str(payload.get("attach_cv") or "auto").strip().lower()
-    delay_sec = max(0.2, min(10.0, float(payload.get("delay_sec", 1.0))))
+    delay_sec = max(0.0, min(10.0, float(payload.get("delay_sec", 0.6))))
+    reuse_session = bool(payload.get("reuse_session", len(items) == 1))
+    close_after = bool(payload.get("close_after", not reuse_session))
+    verify_before_send = bool(payload.get("verify_before_send", True))
+    reset_control = bool(payload.get("reset_control", False))
     items: List[Dict[str, Any]] = payload.get("items") or []
+
+    if reset_control:
+        with CONTROL_LOCK:
+            BULK_CONTROL["paused"] = False
+            BULK_CONTROL["stopped"] = False
 
     if not items:
         return {"ok": False, "error": "Danh sách email trống.", "results": []}
@@ -127,6 +277,23 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
             subj = str(item.get("subject") or "").strip()
             body = str(item.get("body") or "").strip()
             valid = bool(to_addr and "@" in to_addr and subj and body)
+            if valid and verify_before_send:
+                v = verify_recipient_mailbox(to_addr)
+                if v["status"] in ("INVALID_550", "NO_MX", "INVALID_SYNTAX"):
+                    results.append(
+                        {
+                            "id": item.get("id"),
+                            "company": item.get("company", ""),
+                            "to": to_addr,
+                            "subject": subj,
+                            "status": "blocked_invalid_email",
+                            "detail": f"Chặn gửi vì không tồn tại ({v['status']}): {v['detail']}",
+                        }
+                    )
+                    continue
+                detail_msg = f"Hợp lệ & {v['status']} ({v['mx']})"
+            else:
+                detail_msg = "Kiểm tra hợp lệ (chưa gửi thật)" if valid else "Thiếu email/tiêu đề/nội dung"
             results.append(
                 {
                     "id": item.get("id"),
@@ -134,7 +301,7 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
                     "to": to_addr,
                     "subject": subj,
                     "status": "validated_dry_run" if valid else "skipped_invalid",
-                    "detail": "Kiểm tra hợp lệ (chưa gửi thật)" if valid else "Thiếu email/tiêu đề/nội dung",
+                    "detail": detail_msg,
                 }
             )
         return {
@@ -155,11 +322,7 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     try:
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=20)
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.login(sender_email, app_password)
+        server = _get_or_open_smtp(smtp_host, smtp_port, sender_email, app_password)
     except Exception as exc:
         return {
             "ok": False,
@@ -169,6 +332,24 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         for idx, item in enumerate(items):
+            while True:
+                with CONTROL_LOCK:
+                    stopped = BULK_CONTROL["stopped"]
+                    paused = BULK_CONTROL["paused"]
+                if stopped:
+                    close_pooled_smtp()
+                    return {
+                        "ok": True,
+                        "mode": mode,
+                        "stopped": True,
+                        "sent_count": sum(1 for r in results if r["status"] == "sent"),
+                        "failed_count": sum(1 for r in results if r["status"] not in ("sent",)),
+                        "results": results,
+                    }
+                if not paused:
+                    break
+                time.sleep(0.15)
+
             raw_to = str(item.get("to") or "").strip()
             target_to = sender_email if mode == "test_self" else raw_to
             subj = str(item.get("subject") or "").strip()
@@ -190,6 +371,21 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
                 )
                 continue
 
+            if mode == "live" and verify_before_send:
+                v = verify_recipient_mailbox(target_to)
+                if v["status"] in ("INVALID_550", "NO_MX", "INVALID_SYNTAX"):
+                    results.append(
+                        {
+                            "id": item.get("id"),
+                            "company": item.get("company", ""),
+                            "to": target_to,
+                            "subject": subj,
+                            "status": "blocked_invalid_email",
+                            "detail": f"Đã chặn gửi để tránh bounce ({v['status']}): {v['detail']}",
+                        }
+                    )
+                    continue
+
             try:
                 msg = build_email_message(
                     sender_email=sender_email,
@@ -200,7 +396,11 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
                     attach_cv=attach_cv,
                     job_lang=job_lang,
                 )
-                server.send_message(msg)
+                try:
+                    server.send_message(msg)
+                except smtplib.SMTPServerDisconnected:
+                    server = _get_or_open_smtp(smtp_host, smtp_port, sender_email, app_password, force_new=True)
+                    server.send_message(msg)
                 results.append(
                     {
                         "id": item.get("id"),
@@ -223,19 +423,17 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
                     }
                 )
 
-            if idx < len(items) - 1:
+            if idx < len(items) - 1 and delay_sec > 0:
                 time.sleep(delay_sec)
     finally:
-        try:
-            server.quit()
-        except Exception:
-            pass
+        if close_after or not reuse_session:
+            close_pooled_smtp()
 
     return {
         "ok": True,
         "mode": mode,
         "sent_count": sum(1 for r in results if r["status"] == "sent"),
-        "failed_count": sum(1 for r in results if r["status"] in ("failed", "skipped_invalid")),
+        "failed_count": sum(1 for r in results if r["status"] != "sent"),
         "results": results,
     }
 
@@ -314,6 +512,59 @@ class JobHubRequestHandler(SimpleHTTPRequestHandler):
                 self._send_cors_headers()
                 self.end_headers()
                 self.wfile.write(raw_eml)
+            except Exception as exc:
+                self._send_json(500, {"ok": False, "error": f"Server error: {exc}"})
+            return
+
+        if clean_path == "/api/verify-emails":
+            try:
+                content_len = int(self.headers.get("Content-Length", "0"))
+                if content_len <= 0 or content_len > 2 * 1024 * 1024:
+                    self._send_json(400, {"ok": False, "error": "Payload size invalid."})
+                    return
+                payload = json.loads(self.rfile.read(content_len).decode("utf-8"))
+                raw_emails = payload.get("emails") or []
+                force = bool(payload.get("force", False))
+                unique_list: List[str] = []
+                seen = set()
+                for e in raw_emails:
+                    s = str(e or "").strip()
+                    if s and s.lower() not in seen:
+                        seen.add(s.lower())
+                        unique_list.append(s)
+                with ThreadPoolExecutor(max_workers=12) as ex:
+                    results = list(ex.map(lambda em: verify_recipient_mailbox(em, force_refresh=force), unique_list))
+                self._send_json(200, {
+                    "ok": True,
+                    "total": len(results),
+                    "verified_count": sum(1 for r in results if r["status"] == "VERIFIED_250"),
+                    "ok_count": sum(1 for r in results if r["ok"]),
+                    "results": results,
+                })
+            except Exception as exc:
+                self._send_json(500, {"ok": False, "error": f"Server error: {exc}"})
+            return
+
+        if clean_path == "/api/bulk-control":
+            try:
+                content_len = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(content_len).decode("utf-8")) if content_len > 0 else {}
+                action = str(payload.get("action") or "").strip().lower()
+                with CONTROL_LOCK:
+                    if action == "pause":
+                        BULK_CONTROL["paused"] = True
+                    elif action == "resume":
+                        BULK_CONTROL["paused"] = False
+                    elif action == "stop":
+                        BULK_CONTROL["paused"] = False
+                        BULK_CONTROL["stopped"] = True
+                    elif action == "reset":
+                        BULK_CONTROL["paused"] = False
+                        BULK_CONTROL["stopped"] = False
+                    state = dict(BULK_CONTROL)
+                if action in ("stop", "reset", "close_smtp"):
+                    close_pooled_smtp()
+                self._send_json(200, {"ok": True, "action": action, "state": state})
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": f"Server error: {exc}"})
             return

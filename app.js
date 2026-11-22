@@ -112,19 +112,70 @@ function getCvMetaByLang(lang) {
   };
 }
 
+const VERIFIED_DOMAIN_EMAILS = {
+  "n8n.io": "hello@n8n.io",
+  "make.com": "hr@make.com",
+  "haravan.com": "hr@haravan.com",
+  "sapo.vn": "tuyendung@sapo.vn",
+  "mindx.edu.vn": "tuyendung@mindx.edu.vn",
+  "topcv.vn": "hr@topcv.vn",
+  "vlance.vn": "hotro@vlance.vn",
+  "mservice.com.vn": "tuyendung@mservice.com.vn",
+  "timo.vn": "support@timo.vn",
+  "imerit.net": "hr@imerit.net",
+  "automattic.com": "jobs@automattic.com",
+  "toggl.com": "jobs@toggl.com",
+  "canonical.com": "hr@canonical.com",
+  "buffer.com": "hello@buffer.com",
+  "supabase.io": "support@supabase.io",
+  "supabase.com": "support@supabase.com",
+  "allarahealth.com": "careers@allarahealth.com",
+  "harvey.ai": "accommodations@harvey.ai",
+  "certik.com": "careers@certik.com",
+  "knuddels.de": "jobs@knuddels.de",
+  "coingecko.com": "hello@coingecko.com",
+  "remotive.com": "hello@remotive.com",
+  "glints.com": "hi@glints.com",
+  "iapwe.org": "applications@iapwe.org",
+  "kms-technology.com": "career@kms-technology.com",
+  "ahamove.com": "talent@ahamove.com",
+  "ghn.vn": "talent@ghn.vn",
+  "giaohangtietkiem.vn": "tuyendung@giaohangtietkiem.vn",
+  "coolmate.me": "tuyendung@coolmate.me",
+  "concung.com": "hr@concung.com",
+  "cellphones.com.vn": "tuyendung@cellphones.com.vn",
+  "gearvn.com": "tuyendung@gearvn.com",
+  "kpmg.com": "career@kpmg.com",
+  "acbs.com.vn": "hr@acbs.com.vn",
+  "vnpay.vn": "tuyendung@vnpay.vn",
+  "itviec.com": "hr@itviec.com",
+  "topdev.vn": "hr@topdev.vn",
+  "vieclam24h.vn": "hr@vieclam24h.vn",
+  "apollo.edu.vn": "hr@apollo.edu.vn",
+  "ila.edu.vn": "hr@ila.edu.vn",
+  "prepedu.com": "tuyendung@prepedu.com",
+  "jaxtina.com": "tuyendung@jaxtina.com",
+  "langmaster.edu.vn": "tuyendung@langmaster.edu.vn",
+  "stepup.edu.vn": "hr@stepup.edu.vn",
+  "funix.edu.vn": "tuyendung@funix.edu.vn",
+  "coderschool.vn": "hr@coderschool.vn",
+  "sapp.edu.vn": "tuyendung@sapp.edu.vn",
+  "seongon.com": "tuyendung@seongon.com",
+  "chinmedia.vn": "hr@chinmedia.vn",
+  "pmax.com.vn": "hr@pmax.com.vn",
+  "1office.vn": "hr@1office.vn",
+  "base.vn": "hr@base.vn"
+};
+
 function resolveClientHrEmail(company, applyUrl, desc, market) {
   const m = String(desc || "").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
   if (m) return m[0];
   try {
     const host = new URL(applyUrl || "").hostname.toLowerCase();
-    const portals = ["facebook.com","www.facebook.com","linkedin.com","www.linkedin.com","remotive.com","remoteok.com","himalayas.app","arbeitnow.com","www.arbeitnow.com","topcv.vn","www.topcv.vn","ybox.vn","glints.com","upwork.com","www.upwork.com"];
-    if (host && !portals.includes(host) && host.includes(".")) {
-      const cleanHost = host.replace(/^(www\.|careers\.|jobs\.|about\.)/, "");
-      return `${market === "Vietnam" ? "tuyendung" : "careers"}@${cleanHost}`;
-    }
+    const cleanHost = host.replace(/^(www\.|careers\.|jobs\.|about\.|tuyendung\.)/, "");
+    if (VERIFIED_DOMAIN_EMAILS[cleanHost]) return VERIFIED_DOMAIN_EMAILS[cleanHost];
   } catch (e) {}
-  const slug = String(company || "company").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 24) || "company";
-  return `${market === "Vietnam" ? "tuyendung" : "careers"}@${slug}.${market === "Vietnam" ? "vn" : "com"}`;
+  return "";
 }
 
 function getDirectJobUrl(job) {
@@ -153,22 +204,33 @@ function formatShortJobUrl(url) {
 function loadPersistence() {
   try {
     const rawState = localStorage.getItem(STORAGE_KEY_STATE);
+    const schemaV2 = localStorage.getItem("tk_jobhub_email_schema_v2");
     if (rawState) {
       const sanitizedState = rawState.replace(/pn852007@gmail\.com/gi, WORK_EMAIL);
       JOB_STATE = JSON.parse(sanitizedState);
       let mutated = sanitizedState !== rawState;
       for (const [jid, st] of Object.entries(JOB_STATE)) {
-        if (st && typeof st.customEmail === "string" && !st.customEmail.trim()) {
-          delete st.customEmail;
-          mutated = true;
-        }
-        if (st && typeof st.customBody === "string" && !st.customBody.includes("CV_Phuc_Nguyen_")) {
-          delete st.customBody;
-          mutated = true;
+        if (!st || typeof st !== "object") continue;
+        if (!schemaV2) {
+          // Wipe unverified legacy email/subject/body overrides once so VERIFIED_250 addresses apply cleanly
+          if (st.customEmail !== undefined) { delete st.customEmail; mutated = true; }
+          if (st.customSubject !== undefined) { delete st.customSubject; mutated = true; }
+          if (st.customBody !== undefined) { delete st.customBody; mutated = true; }
+          if (st.status === "sent") { st.status = "new"; delete st.sentAt; mutated = true; }
+        } else {
+          if (typeof st.customEmail === "string" && !st.customEmail.trim()) {
+            delete st.customEmail;
+            mutated = true;
+          }
+          if (typeof st.customBody === "string" && !st.customBody.includes("CV_Phuc_Nguyen_")) {
+            delete st.customBody;
+            mutated = true;
+          }
         }
       }
       if (mutated) saveState();
     }
+    if (!schemaV2) localStorage.setItem("tk_jobhub_email_schema_v2", "1");
   } catch (e) { JOB_STATE = {}; }
 
   try {
@@ -440,8 +502,9 @@ function renderCards(filtered) {
     else if (st === "interview" || st === "offer") statusBadge = `<span class="badge badge-status-interview"><i class="fa-solid fa-trophy"></i> Phỏng vấn/Offer</span>`;
 
     const effectiveEmail = getEffectiveHrEmail(j, stObj);
+    const isVerified = effectiveEmail === (j.hr_email || "").trim() && (j.hr_email_verified || j.hr_email_source === "smtp_verified_250");
     const emailBadge = effectiveEmail
-      ? `<span class="badge badge-email"><i class="fa-solid fa-at"></i> ${escapeHtml(effectiveEmail)}</span>`
+      ? `<span class="badge badge-email" title="${isVerified ? "Đã xác thực MX + SMTP 250 OK" : "Email HR"}"><i class="fa-solid ${isVerified ? "fa-circle-check" : "fa-at"}"></i> ${escapeHtml(effectiveEmail)}${isVerified ? " ✓" : ""}</span>`
       : `<span class="badge badge-portal"><i class="fa-solid fa-link"></i> Nộp qua Portal</span>`;
 
     const atsBadge = j.ats_profile
@@ -856,9 +919,16 @@ function openStudio(jobId, initialTab = "fit") {
   document.getElementById("em-to").value = effectiveTo;
   const srcHintEl = document.getElementById("em-source-hint");
   if (srcHintEl) {
-    srcHintEl.innerHTML = job.hr_email_source === "explicit"
-      ? `<i class="fa-solid fa-circle-check" style="color:#059669;"></i> Email trích xuất trực tiếp từ tin tuyển dụng`
-      : `<i class="fa-solid fa-wand-magic-sparkles"></i> Email HR gợi ý theo tên miền công ty (có thể chỉnh sửa trước khi gửi)`;
+    const isVerified = effectiveTo === (job.hr_email || "").trim() && (job.hr_email_verified || job.hr_email_source === "smtp_verified_250");
+    if (isVerified) {
+      srcHintEl.innerHTML = `<i class="fa-solid fa-circle-check" style="color:#059669;"></i> Email doanh nghiệp thật đã xác thực MX + SMTP 250 OK (${escapeHtml(job.hr_email_mx || "Verified")})`;
+    } else if (job.hr_email_source === "explicit") {
+      srcHintEl.innerHTML = `<i class="fa-solid fa-circle-check" style="color:#059669;"></i> Email trích xuất trực tiếp từ tin tuyển dụng`;
+    } else {
+      srcHintEl.innerHTML = effectiveTo
+        ? `<i class="fa-solid fa-envelope" style="color:#0284c7;"></i> Email HR đã chỉnh sửa / theo tên miền`
+        : `<i class="fa-solid fa-circle-info" style="color:#d97706;"></i> Chưa có Email HR trong tin — bạn có thể dán vào ô trên hoặc nộp qua Portal`;
+    }
   }
   document.getElementById("em-subject").value = st.customSubject || job.tailored.email_subject;
   document.getElementById("em-body").value = st.customBody || job.tailored.email_body;
@@ -1537,6 +1607,12 @@ function renderBulkTable() {
         <td>
           <input type="text" class="bulk-inline-input" placeholder="Nhập email HR..." value="${escapeAttr(toVal)}"
                  oninput="updateBulkRowField('${escapeAttr(j.id)}', 'email', this.value)">
+          <div id="bulk-verify-tag-${escapeAttr(j.id)}" style="margin-top:4px;font-size:0.68rem;">
+            ${(toVal === (j.hr_email || "").trim() && (j.hr_email_verified || j.hr_email_source === "smtp_verified_250"))
+              ? `<span class="badge-verified-email"><i class="fa-solid fa-circle-check"></i> Verified SMTP 250</span>`
+              : (toVal ? `<span style="color:#64748b;">Chưa verify lại</span>` : `<span style="color:#b91c1c;">Thiếu email</span>`)
+            }
+          </div>
         </td>
         <td>
           <input type="text" class="bulk-inline-input" value="${escapeAttr(subjVal)}"
@@ -1627,36 +1703,170 @@ function appendBulkLog(msg) {
   box.scrollTop = box.scrollHeight;
 }
 
-function launchGmailWave(startIdx, endIdx) {
+const BULK_SEND_STATE = {
+  running: false,
+  paused: false,
+  stopped: false,
+  mode: "",
+  total: 0,
+  done: 0,
+  sent: 0,
+  failed: 0,
+  abortCtrl: null
+};
+
+function sleepMs(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitWhileBulkPaused() {
+  while (BULK_SEND_STATE.paused && !BULK_SEND_STATE.stopped) {
+    await sleepMs(120);
+  }
+  return !BULK_SEND_STATE.stopped;
+}
+
+function updateBulkProgressUI({ visible = true, statusText = null, detailText = null, stateClass = "" } = {}) {
+  const panel = document.getElementById("bulk-progress-panel");
+  const statusEl = document.getElementById("bulk-prog-status");
+  const countsEl = document.getElementById("bulk-prog-counts");
+  const fillEl = document.getElementById("bulk-prog-fill");
+  const detailEl = document.getElementById("bulk-prog-detail");
+  const pauseBtn = document.getElementById("bulk-btn-pause");
+  const stopBtn = document.getElementById("bulk-btn-stop");
+  if (!panel) return;
+
+  panel.style.display = visible ? "block" : "none";
+  const pct = BULK_SEND_STATE.total > 0 ? Math.min(100, Math.round((BULK_SEND_STATE.done / BULK_SEND_STATE.total) * 100)) : 0;
+  if (countsEl) {
+    countsEl.textContent = `${BULK_SEND_STATE.done} / ${BULK_SEND_STATE.total} (${pct}%) • OK: ${BULK_SEND_STATE.sent} • Lỗi/Chặn: ${BULK_SEND_STATE.failed}`;
+  }
+  if (fillEl) {
+    fillEl.style.width = `${pct}%`;
+    fillEl.classList.remove("is-paused", "is-stopped");
+    if (stateClass) fillEl.classList.add(stateClass);
+    else if (BULK_SEND_STATE.stopped) fillEl.classList.add("is-stopped");
+    else if (BULK_SEND_STATE.paused) fillEl.classList.add("is-paused");
+  }
+  if (statusEl && statusText !== null) statusEl.textContent = statusText;
+  if (detailEl && detailText !== null) detailEl.textContent = detailText;
+  if (pauseBtn) {
+    pauseBtn.disabled = !BULK_SEND_STATE.running;
+    pauseBtn.innerHTML = BULK_SEND_STATE.paused
+      ? `<i class="fa-solid fa-play"></i> Tiếp tục (Resume)`
+      : `<i class="fa-solid fa-pause"></i> Tạm dừng (Pause)`;
+  }
+  if (stopBtn) {
+    stopBtn.disabled = !BULK_SEND_STATE.running;
+  }
+}
+
+async function sendBulkControlSignal(action) {
+  try {
+    await fetch(`${getBulkMailerBaseUrl()}/api/bulk-control`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action })
+    });
+  } catch (e) {}
+}
+
+async function togglePauseBulkSend() {
+  if (!BULK_SEND_STATE.running) return;
+  BULK_SEND_STATE.paused = !BULK_SEND_STATE.paused;
+  if (BULK_SEND_STATE.paused) {
+    sendBulkControlSignal("pause");
+    updateBulkProgressUI({
+      statusText: `⏸ Đang tạm dừng (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})`,
+      detailText: "Bấm Tiếp tục (Resume) để gửi tiếp hoặc Dừng hẳn (Stop) để hủy.",
+      stateClass: "is-paused"
+    });
+    appendBulkLog(`[Control] Tạm dừng tại ${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total}.`);
+  } else {
+    sendBulkControlSignal("resume");
+    updateBulkProgressUI({
+      statusText: `▶ Đang tiếp tục gửi (${BULK_SEND_STATE.mode})...`,
+      detailText: "Đang xử lý email kế tiếp..."
+    });
+    appendBulkLog(`[Control] Tiếp tục tiến trình gửi...`);
+  }
+}
+
+function stopBulkSend() {
+  if (!BULK_SEND_STATE.running) return;
+  BULK_SEND_STATE.stopped = true;
+  BULK_SEND_STATE.paused = false;
+  if (BULK_SEND_STATE.abortCtrl) {
+    try { BULK_SEND_STATE.abortCtrl.abort(); } catch (e) {}
+  }
+  sendBulkControlSignal("stop");
+  updateBulkProgressUI({
+    statusText: `⏹ Đã dừng hẳn tiến trình (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})`,
+    detailText: `Đã gửi thành công ${BULK_SEND_STATE.sent} email trước khi dừng.`,
+    stateClass: "is-stopped"
+  });
+  appendBulkLog(`[Control] Đã bấm DỪNG HẲN (Stop) tại ${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total}.`);
+  showToast("Đã dừng tiến trình gửi email!");
+}
+
+async function launchGmailWave(startIdx, endIdx) {
+  if (BULK_SEND_STATE.running) {
+    showToast("Đang có tiến trình chạy! Hãy Tạm dừng hoặc Dừng hẳn trước.");
+    return;
+  }
   const slice = getBulkJobsList().slice(startIdx, endIdx);
   if (slice.length === 0) {
     showToast("Không còn email nào trong đợt này!");
     return;
   }
 
-  let opened = 0;
-  slice.forEach((j, i) => {
+  Object.assign(BULK_SEND_STATE, {
+    running: true, paused: false, stopped: false, mode: "gmail_wave",
+    total: slice.length, done: 0, sent: 0, failed: 0, abortCtrl: null
+  });
+  updateBulkProgressUI({
+    visible: true,
+    statusText: `Đang mở đợt Gmail Web (${slice.length} tab)...`,
+    detailText: "Bắt đầu mở tab soạn thư..."
+  });
+
+  for (let i = 0; i < slice.length; i++) {
+    if (!(await waitWhileBulkPaused())) break;
+    const j = slice[i];
     const st = getJobState(j.id);
     const to = getEffectiveHrEmail(j, st);
     const subj = st.customSubject || j.tailored.email_subject;
     const body = st.customBody || j.tailored.email_body;
     const url = `https://mail.google.com/mail/?view=cm&fs=1&authuser=${encodeURIComponent(WORK_EMAIL)}&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
 
-    setTimeout(() => {
-      window.open(url, "_blank");
-      JOB_STATE[j.id] = Object.assign({}, getJobState(j.id), {
-        status: "sent",
-        sentAt: new Date().toLocaleString("vi-VN")
-      });
-      saveState();
-      if (i === slice.length - 1) renderAll();
-    }, i * 260);
+    window.open(url, "_blank");
+    JOB_STATE[j.id] = Object.assign({}, getJobState(j.id), {
+      status: "sent",
+      sentAt: new Date().toLocaleString("vi-VN")
+    });
+    BULK_SEND_STATE.done++;
+    BULK_SEND_STATE.sent++;
+    saveState();
+    appendBulkLog(`[Gmail Wave] Đã mở tab #${startIdx + i + 1}: ${j.company} -> ${to || "(chưa điền email)"}`);
+    updateBulkProgressUI({
+      statusText: `Đang mở Gmail Web (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})...`,
+      detailText: `Đã mở: ${j.company} (${to || "Portal"})`
+    });
+    for (let t = 0; t < 4; t++) {
+      if (!(await waitWhileBulkPaused())) break;
+      await sleepMs(100);
+    }
+    if (BULK_SEND_STATE.stopped) break;
+  }
 
-    opened++;
-    appendBulkLog(`[Gmail Wave] Đã mở tab soạn mail #${startIdx + i + 1}: ${j.company} -> ${to || "(chưa điền email)"} | Subject: ${subj}`);
+  const wasStopped = BULK_SEND_STATE.stopped;
+  BULK_SEND_STATE.running = false;
+  updateBulkProgressUI({
+    statusText: wasStopped ? `⏹ Đã dừng Gmail Wave (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})` : `✅ Đã mở xong ${BULK_SEND_STATE.sent} tab Gmail Web`,
+    detailText: wasStopped ? "Đã dừng theo yêu cầu." : "Nếu trình duyệt chặn Popup, chọn Always allow popups rồi bấm Send từng tab.",
+    stateClass: wasStopped ? "is-stopped" : ""
   });
-
-  showToast(`Đang mở ${opened} tab Gmail theo đợt! Nếu trình duyệt chặn Popup, hãy chọn "Always allow popups" cho trang này.`);
+  renderAll();
 }
 
 function markBulkBatchAsSent() {
@@ -1720,7 +1930,104 @@ async function checkLocalMailerHealth(silent = false) {
   return false;
 }
 
+function setBulkRowStatusTag(jobId, html) {
+  const el = document.getElementById(`bulk-verify-tag-${jobId}`);
+  if (el) el.innerHTML = html;
+}
+
+async function verifyAllBulkEmails() {
+  if (BULK_SEND_STATE.running) {
+    showToast("Đang có tiến trình chạy! Hãy Tạm dừng hoặc Dừng hẳn trước.");
+    return;
+  }
+  const jobs = getBulkJobsList();
+  if (jobs.length === 0) {
+    showToast("Danh sách batch đang trống!");
+    return;
+  }
+
+  Object.assign(BULK_SEND_STATE, {
+    running: true, paused: false, stopped: false, mode: "verify",
+    total: jobs.length, done: 0, sent: 0, failed: 0, abortCtrl: new AbortController()
+  });
+  updateBulkProgressUI({
+    visible: true,
+    statusText: `Đang xác thực thực tế (DNS MX + SMTP 250 OK) cho ${jobs.length} job...`,
+    detailText: "Đang kết nối cổng 25 của máy chủ nhận mail..."
+  });
+  appendBulkLog(`[Verify] Bắt đầu kiểm tra DNS MX + SMTP RCPT TO thực tế cho ${jobs.length} job...`);
+
+  const baseUrl = getBulkMailerBaseUrl();
+  const chunkSize = 10;
+  try {
+    for (let start = 0; start < jobs.length; start += chunkSize) {
+      if (!(await waitWhileBulkPaused())) break;
+      const chunk = jobs.slice(start, start + chunkSize);
+      const emails = chunk.map(j => getEffectiveHrEmail(j, getJobState(j.id)));
+
+      let res;
+      try {
+        const resp = await fetch(`${baseUrl}/api/verify-emails`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: BULK_SEND_STATE.abortCtrl.signal,
+          body: JSON.stringify({ emails })
+        });
+        res = await resp.json();
+      } catch (err) {
+        if (err && err.name === "AbortError") break;
+        appendBulkLog(`[Verify] Lỗi kết nối :8787 (${err}).`);
+        showToast("Không kết nối được bulk_mailer.py (:8787)!");
+        break;
+      }
+
+      const byEmail = new Map();
+      for (const r of (res.results || [])) byEmail.set((r.email || "").toLowerCase(), r);
+
+      for (const j of chunk) {
+        const em = getEffectiveHrEmail(j, getJobState(j.id)).toLowerCase();
+        const r = byEmail.get(em) || { status: "UNKNOWN", detail: "Chưa rõ", ok: false, mx: "" };
+        BULK_SEND_STATE.done++;
+        if (r.status === "VERIFIED_250") {
+          BULK_SEND_STATE.sent++;
+          setBulkRowStatusTag(j.id, `<span class="badge-verified-email"><i class="fa-solid fa-circle-check"></i> VERIFIED_250 (${escapeHtml(r.mx)})</span>`);
+        } else if (r.ok) {
+          BULK_SEND_STATE.sent++;
+          setBulkRowStatusTag(j.id, `<span class="badge-verified-email" style="background:#fef3c7;color:#92400e;border-color:#fde68a;">⚠ ${escapeHtml(r.status)}</span>`);
+        } else {
+          BULK_SEND_STATE.failed++;
+          setBulkRowStatusTag(j.id, `<span style="color:#b91c1c;font-weight:700;">❌ ${escapeHtml(r.status)} (${escapeHtml(r.detail)})</span>`);
+          appendBulkLog(` [CẢNH BÁO] ${j.company} (${em}) -> ${r.status}: ${r.detail}`);
+        }
+      }
+
+      updateBulkProgressUI({
+        statusText: `Đang verify email thực tế (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})...`,
+        detailText: `Đã kiểm tra tới: ${chunk[chunk.length - 1].company}`
+      });
+    }
+  } finally {
+    const wasStopped = BULK_SEND_STATE.stopped;
+    BULK_SEND_STATE.running = false;
+    BULK_SEND_STATE.abortCtrl = null;
+    updateBulkProgressUI({
+      statusText: wasStopped
+        ? `⏹ Đã dừng Verify (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})`
+        : `✅ Verify xong ${BULK_SEND_STATE.done} email (${BULK_SEND_STATE.sent} hợp lệ / ${BULK_SEND_STATE.failed} lỗi)`,
+      detailText: wasStopped ? "Đã dừng theo yêu cầu." : "Tất cả email đạt VERIFIED_250 đều sẵn sàng gửi không bị bounce.",
+      stateClass: wasStopped ? "is-stopped" : ""
+    });
+    appendBulkLog(`[Verify] Hoàn tất: ${BULK_SEND_STATE.sent} hợp lệ, ${BULK_SEND_STATE.failed} không hợp lệ/lỗi.`);
+    showToast(`Verify xong: ${BULK_SEND_STATE.sent} hợp lệ / ${BULK_SEND_STATE.failed} lỗi.`);
+  }
+}
+
 async function sendBulkViaLocalServer(mode) {
+  if (BULK_SEND_STATE.running) {
+    showToast("Đang có tiến trình chạy! Hãy bấm Tạm dừng hoặc Dừng hẳn trước.");
+    return;
+  }
+
   const jobs = getBulkJobsList();
   if (jobs.length === 0) {
     showToast("Chưa chọn job nào để gửi!");
@@ -1736,7 +2043,7 @@ async function sendBulkViaLocalServer(mode) {
       showToast("Cần nhập Gmail App Password (16 ký tự) để gửi thật!");
       return;
     }
-    if (!confirm(`Xác nhận gửi THẬT ${jobs.length} email tới HR kèm PDF CV?`)) return;
+    if (!confirm(`Xác nhận gửi THẬT ${jobs.length} email tới HR kèm PDF CV?\n(Hệ thống tự động chặn địa chỉ lỗi trước khi gửi và cho phép Tạm dừng / Dừng hẳn bất cứ lúc nào)`)) return;
   } else if (mode === "test_self" && !appPass) {
     showToast("Cần nhập Gmail App Password để gửi thử vào hộp thư của chính bạn!");
     return;
@@ -1754,43 +2061,133 @@ async function sendBulkViaLocalServer(mode) {
     };
   });
 
-  appendBulkLog(`[SMTP:${mode}] Đang gửi yêu cầu xử lý ${items.length} email tới ${getBulkMailerBaseUrl() || "localhost:8787"}/api/bulk-send...`);
+  Object.assign(BULK_SEND_STATE, {
+    running: true, paused: false, stopped: false, mode,
+    total: items.length, done: 0, sent: 0, failed: 0, abortCtrl: new AbortController()
+  });
+
+  const modeTitle = mode === "live"
+    ? "Đang gửi THẬT kèm PDF CV"
+    : (mode === "test_self" ? "Đang gửi thử về Gmail của bạn" : "Đang kiểm tra Hợp lệ (Dry Run)");
+
+  updateBulkProgressUI({
+    visible: true,
+    statusText: `${modeTitle} (0/${items.length})...`,
+    detailText: "Đang khởi tạo phiên gửi trên localhost:8787..."
+  });
+  appendBulkLog(`[SMTP:${mode}] Bắt đầu xử lý lần lượt ${items.length} email...`);
+  await sendBulkControlSignal("reset");
+
+  const baseUrl = getBulkMailerBaseUrl();
+  const stepDelayMs = mode === "live" ? 450 : 25;
+  let fatalStop = false;
 
   try {
-    const resp = await fetch(`${getBulkMailerBaseUrl()}/api/bulk-send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode,
-        sender_email: senderEmail,
-        sender_name: "Nguyen Tran Tien Phuc",
-        app_password: appPass,
-        attach_cv: attachCv,
-        items
-      })
-    });
-    const res = await resp.json();
-    if (!res.ok) {
-      appendBulkLog(`[LỖI] ${res.error}`);
-      showToast(res.error || "Gửi thất bại!");
-      return;
-    }
+    for (let i = 0; i < items.length; i++) {
+      if (!(await waitWhileBulkPaused())) break;
+      const item = items[i];
+      updateBulkProgressUI({
+        statusText: `${modeTitle} (${i + 1}/${items.length})...`,
+        detailText: `Đang xử lý: ${item.company} (${item.to || "thiếu email"})`
+      });
 
-    const nowStr = new Date().toLocaleString("vi-VN");
-    for (const r of (res.results || [])) {
-      appendBulkLog(` - [${r.status}] ${r.company} (${r.to}) -> ${r.detail}`);
-      if (mode === "live" && r.status === "sent" && r.id) {
-        JOB_STATE[r.id] = Object.assign({}, getJobState(r.id), { status: "sent", sentAt: nowStr });
+      let res;
+      try {
+        const resp = await fetch(`${baseUrl}/api/bulk-send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: BULK_SEND_STATE.abortCtrl.signal,
+          body: JSON.stringify({
+            mode,
+            sender_email: senderEmail,
+            sender_name: "Nguyen Tran Tien Phuc",
+            app_password: appPass,
+            attach_cv: attachCv,
+            delay_sec: 0,
+            reuse_session: true,
+            close_after: i === items.length - 1,
+            verify_before_send: true,
+            reset_control: i === 0,
+            items: [item]
+          })
+        });
+        res = await resp.json();
+      } catch (err) {
+        if (err && err.name === "AbortError") break;
+        appendBulkLog(`[LỖI KẾT NỐI] Chưa chạy bulk_mailer.py hoặc bị ngắt (${err}).`);
+        showToast("Không kết nối được bulk_mailer.py (:8787)!");
+        fatalStop = true;
+        break;
       }
+
+      if (!res.ok) {
+        appendBulkLog(`[LỖI SMTP] ${res.error}`);
+        showToast(res.error || "Gửi thất bại!");
+        fatalStop = true;
+        break;
+      }
+
+      if (res.stopped) {
+        BULK_SEND_STATE.stopped = true;
+        break;
+      }
+
+      const nowStr = new Date().toLocaleString("vi-VN");
+      const r = (res.results || [])[0];
+      if (r) {
+        appendBulkLog(` - [${r.status}] ${r.company} (${r.to}) -> ${r.detail}`);
+        const okStatus = r.status === "sent" || r.status === "validated_dry_run";
+        BULK_SEND_STATE.done++;
+        if (okStatus) {
+          BULK_SEND_STATE.sent++;
+          if (mode === "live" && r.status === "sent" && r.id) {
+            JOB_STATE[r.id] = Object.assign({}, getJobState(r.id), { status: "sent", sentAt: nowStr });
+            saveState();
+            setBulkRowStatusTag(r.id, `<span class="badge-verified-email"><i class="fa-solid fa-paper-plane"></i> Đã gửi SMTP</span>`);
+          } else {
+            setBulkRowStatusTag(r.id, `<span class="badge-verified-email"><i class="fa-solid fa-check"></i> ${escapeHtml(r.detail)}</span>`);
+          }
+        } else {
+          BULK_SEND_STATE.failed++;
+          setBulkRowStatusTag(r.id, `<span style="color:#b91c1c;font-weight:700;">🛑 ${escapeHtml(r.detail)}</span>`);
+        }
+      } else {
+        BULK_SEND_STATE.done++;
+      }
+
+      updateBulkProgressUI({
+        statusText: `${modeTitle} (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})...`,
+        detailText: `Xong: ${item.company} -> ${r ? r.status : "done"}`
+      });
+
+      if (i < items.length - 1) {
+        const slices = Math.max(1, Math.ceil(stepDelayMs / 100));
+        for (let s = 0; s < slices; s++) {
+          if (!(await waitWhileBulkPaused())) break;
+          await sleepMs(Math.min(100, stepDelayMs));
+        }
+      }
+      if (BULK_SEND_STATE.stopped) break;
     }
+  } finally {
+    await sendBulkControlSignal("close_smtp");
+    const wasStopped = BULK_SEND_STATE.stopped || fatalStop;
+    BULK_SEND_STATE.running = false;
+    BULK_SEND_STATE.abortCtrl = null;
     if (mode === "live") {
       saveState();
       renderAll();
     }
-    showToast(`Hoàn tất (${mode}): ${res.sent_count} thành công, ${res.failed_count} bỏ qua/lỗi.`);
-  } catch (err) {
-    appendBulkLog(`[LỖI KẾT NỐI] Chưa chạy bulk_mailer.py hoặc bị chặn kết nối (${err}). Hãy mở Cách 1 (Gmail Wave) hoặc chạy 'python bulk_mailer.py'.`);
-    showToast("Không kết nối được bulk_mailer.py (:8787)!");
+    updateBulkProgressUI({
+      statusText: wasStopped
+        ? `⏹ Đã dừng (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})`
+        : `✅ Hoàn tất (${mode}): ${BULK_SEND_STATE.sent} thành công, ${BULK_SEND_STATE.failed} lỗi/chặn`,
+      detailText: wasStopped
+        ? `Đã xử lý ${BULK_SEND_STATE.done} email (${BULK_SEND_STATE.sent} thành công).`
+        : "Phiên gửi SMTP đã đóng an toàn.",
+      stateClass: wasStopped ? "is-stopped" : ""
+    });
+    showToast(`Hoàn tất (${mode}): ${BULK_SEND_STATE.sent} thành công, ${BULK_SEND_STATE.failed} bỏ qua/lỗi.`);
   }
 }
 
