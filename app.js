@@ -84,6 +84,11 @@ let CURRENT_JOB_ID = null;
 let CURRENT_CV_LANG = "en";
 let CURRENT_CL_LANG = "en";
 let CURRENT_EMAIL_CV_LANG = "en";
+let CARDS_RENDER_LIMIT = 60;
+let QUEUE_RENDER_LIMIT = 120;
+let TRACKER_RENDER_LIMIT = 150;
+let BULK_TABLE_RENDER_LIMIT = 120;
+let HAS_SAVED_APP_PASSWORD = false;
 
 function getEffectiveHrEmail(job, st) {
   const saved = st && typeof st.customEmail === "string" ? st.customEmail.trim() : "";
@@ -204,15 +209,14 @@ function formatShortJobUrl(url) {
 function loadPersistence() {
   try {
     const rawState = localStorage.getItem(STORAGE_KEY_STATE);
-    const schemaV2 = localStorage.getItem("tk_jobhub_email_schema_v2");
+    const schemaV3 = localStorage.getItem("tk_jobhub_email_schema_v3");
     if (rawState) {
       const sanitizedState = rawState.replace(/pn852007@gmail\.com/gi, WORK_EMAIL);
       JOB_STATE = JSON.parse(sanitizedState);
       let mutated = sanitizedState !== rawState;
       for (const [jid, st] of Object.entries(JOB_STATE)) {
         if (!st || typeof st !== "object") continue;
-        if (!schemaV2) {
-          // Wipe unverified legacy email/subject/body overrides once so VERIFIED_250 addresses apply cleanly
+        if (!schemaV3) {
           if (st.customEmail !== undefined) { delete st.customEmail; mutated = true; }
           if (st.customSubject !== undefined) { delete st.customSubject; mutated = true; }
           if (st.customBody !== undefined) { delete st.customBody; mutated = true; }
@@ -230,16 +234,25 @@ function loadPersistence() {
       }
       if (mutated) saveState();
     }
-    if (!schemaV2) localStorage.setItem("tk_jobhub_email_schema_v2", "1");
+    if (!schemaV3) localStorage.setItem("tk_jobhub_email_schema_v3", "1");
   } catch (e) { JOB_STATE = {}; }
 
   try {
+    const schemaV3Custom = localStorage.getItem("tk_jobhub_custom_schema_v3");
     const rawCustom = localStorage.getItem(STORAGE_KEY_CUSTOM_JOBS);
     if (rawCustom) {
       const sanitizedCustom = rawCustom.replace(/pn852007@gmail\.com/gi, WORK_EMAIL);
-      CUSTOM_JOBS = JSON.parse(sanitizedCustom);
-      if (sanitizedCustom !== rawCustom) saveCustomJobs();
+      let parsed = JSON.parse(sanitizedCustom);
+      let mutatedCustom = sanitizedCustom !== rawCustom;
+      if (!schemaV3Custom && Array.isArray(parsed)) {
+        // Remove legacy 2 browser_* items scraped before 1,000+ upgrade
+        parsed = parsed.filter(j => j && !String(j.id || "").startsWith("browser_"));
+        mutatedCustom = true;
+      }
+      CUSTOM_JOBS = Array.isArray(parsed) ? parsed : [];
+      if (mutatedCustom) saveCustomJobs();
     }
+    if (!schemaV3Custom) localStorage.setItem("tk_jobhub_custom_schema_v3", "1");
   } catch (e) { CUSTOM_JOBS = []; }
 }
 
@@ -479,18 +492,31 @@ function clearSelection() {
 // --------------------------------------------------------------------------
 // RENDER CARDS, QUEUE, RADAR & TRACKER
 // --------------------------------------------------------------------------
+function loadMoreCards(step) {
+  CARDS_RENDER_LIMIT += step;
+  renderAll();
+}
+
+function showAllCardsFiltered() {
+  CARDS_RENDER_LIMIT = 99999;
+  renderAll();
+}
+
 function renderCards(filtered) {
   const grid = document.getElementById("jobs-grid");
+  const pagBar = document.getElementById("cards-pagination-bar");
   if (filtered.length === 0) {
     grid.innerHTML = `<div class="panel-card" style="grid-column:1/-1;text-align:center;padding:38px;">
       <h3>Không tìm thấy công việc khớp bộ lọc hiện tại</h3>
       <p style="color:var(--text-muted);font-size:0.88rem;">Thử chuyển lĩnh vực hoặc bấm "Dán JD Bất Kỳ (/apply)" ở góc trên để thêm job mới.</p>
     </div>`;
+    if (pagBar) pagBar.innerHTML = "";
     return;
   }
 
+  const visibleList = filtered.slice(0, CARDS_RENDER_LIMIT);
   const cats = HUB_DATA.categories || {};
-  grid.innerHTML = filtered.map(j => {
+  grid.innerHTML = visibleList.map(j => {
     const stObj = getJobState(j.id);
     const st = stObj.status || "new";
     const isSel = SELECTED_IDS.has(j.id);
@@ -594,6 +620,27 @@ function renderCards(filtered) {
       </article>
     `;
   }).join("");
+
+  if (pagBar) {
+    if (visibleList.length < filtered.length) {
+      pagBar.innerHTML = `
+        <div class="panel-card" style="display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;padding:12px 18px;">
+          <span style="font-size:0.84rem;color:#334155;font-weight:600;">Đang hiển thị <strong>${visibleList.length}</strong> / <strong>${filtered.length}</strong> công việc thật có email</span>
+          <button type="button" class="btn btn-primary btn-sm" onclick="loadMoreCards(120)">Xem thêm 120 job</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="showAllCardsFiltered()">Hiển thị toàn bộ (${filtered.length})</button>
+        </div>
+      `;
+    } else {
+      pagBar.innerHTML = filtered.length > 60
+        ? `<span style="font-size:0.8rem;color:#64748b;font-weight:600;">Đã hiển thị toàn bộ ${filtered.length} công việc khớp bộ lọc.</span>`
+        : "";
+    }
+  }
+}
+
+function showAllQueueRows() {
+  QUEUE_RENDER_LIMIT = 99999;
+  renderAll();
 }
 
 function renderQueue(allJobs) {
@@ -616,7 +663,16 @@ function renderQueue(allJobs) {
     return;
   }
 
-  tbody.innerHTML = queueJobs.map(j => {
+  const visibleQueue = queueJobs.slice(0, QUEUE_RENDER_LIMIT);
+  const queueFooter = visibleQueue.length < queueJobs.length
+    ? `<tr><td colspan="5" style="text-align:center;padding:12px;background:#f8fafc;">
+        <span style="font-size:0.82rem;font-weight:600;color:#334155;margin-right:10px;">Đang hiện ${visibleQueue.length} / ${queueJobs.length} job trong bảng</span>
+        <button type="button" class="btn btn-primary btn-sm" onclick="QUEUE_RENDER_LIMIT+=150;renderAll()">Xem thêm 150 dòng</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="showAllQueueRows()">Hiện toàn bộ (${queueJobs.length})</button>
+      </td></tr>`
+    : "";
+
+  tbody.innerHTML = visibleQueue.map(j => {
     const st = getJobState(j.id);
     const subj = st.customSubject || j.tailored.email_subject;
     const body = st.customBody || j.tailored.email_body;
@@ -667,7 +723,7 @@ function renderQueue(allJobs) {
         </td>
       </tr>
     `;
-  }).join("");
+  }).join("") + queueFooter;
 }
 
 function renderSourceRadar() {
@@ -716,7 +772,16 @@ function renderTracker(allJobs) {
     return (sb - sa) || ((b.fit_score || 0) - (a.fit_score || 0));
   });
 
-  tbody.innerHTML = rows.map(j => {
+  const visibleRows = rows.slice(0, TRACKER_RENDER_LIMIT);
+  const trackerFooter = visibleRows.length < rows.length
+    ? `<tr><td colspan="7" style="text-align:center;padding:12px;background:#f8fafc;">
+        <span style="font-size:0.82rem;font-weight:600;color:#334155;margin-right:10px;">Đang hiện ${visibleRows.length} / ${rows.length} job</span>
+        <button type="button" class="btn btn-primary btn-sm" onclick="TRACKER_RENDER_LIMIT+=200;renderAll()">Xem thêm 200 dòng</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="TRACKER_RENDER_LIMIT=99999;renderAll()">Hiện toàn bộ (${rows.length})</button>
+      </td></tr>`
+    : "";
+
+  tbody.innerHTML = visibleRows.map(j => {
     const st = getJobState(j.id);
     const catInfo = cats[j.category] || { label: j.category };
     const atsTxt = j.ats_profile ? `${j.ats_profile.vendor} (${j.ats_profile.coverage_pct}%)` : "Direct";
@@ -755,7 +820,7 @@ function renderTracker(allJobs) {
         </td>
       </tr>
     `;
-  }).join("");
+  }).join("") + trackerFooter;
 }
 
 function renderAll() {
@@ -1582,7 +1647,16 @@ function renderBulkTable() {
     return;
   }
 
-  tbody.innerHTML = jobs.map((j, idx) => {
+  const visibleBulk = jobs.slice(0, BULK_TABLE_RENDER_LIMIT);
+  const bulkFooter = visibleBulk.length < jobs.length
+    ? `<tr><td colspan="6" style="text-align:center;padding:10px;background:#f8fafc;">
+        <span style="font-size:0.8rem;font-weight:600;color:#334155;margin-right:8px;">Bảng đang hiện ${visibleBulk.length} / ${jobs.length} job (Khi bấm Gửi sẽ gửi TOÀN BỘ ${jobs.length} job)</span>
+        <button type="button" class="btn btn-primary btn-sm" onclick="BULK_TABLE_RENDER_LIMIT+=200;renderBulkTable()">Xem thêm 200 dòng</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="BULK_TABLE_RENDER_LIMIT=99999;renderBulkTable()">Hiện tất cả (${jobs.length})</button>
+      </td></tr>`
+    : "";
+
+  tbody.innerHTML = visibleBulk.map((j, idx) => {
     const st = getJobState(j.id);
     const toVal = getEffectiveHrEmail(j, st);
     const subjVal = st.customSubject || j.tailored.email_subject;
@@ -1640,7 +1714,7 @@ function renderBulkTable() {
         </td>
       </tr>
     `;
-  }).join("");
+  }).join("") + bulkFooter;
 }
 
 function updateBulkRowField(jobId, field, value) {
@@ -1907,18 +1981,35 @@ function getBulkMailerBaseUrl() {
 
 async function checkLocalMailerHealth(silent = false) {
   const badge = document.getElementById("smtp-health-badge");
+  const savedHint = document.getElementById("smtp-saved-pass-hint");
+  const passEl = document.getElementById("smtp-app-pass");
+  const senderEl = document.getElementById("smtp-sender");
   const url = `${getBulkMailerBaseUrl()}/api/health`;
   try {
     const resp = await fetch(url, { method: "GET" });
     const data = await resp.json();
     if (data.ok) {
-      badge.textContent = "Server :8787 SẴN SÀNG (Kèm PDF CV)";
+      HAS_SAVED_APP_PASSWORD = Boolean(data.has_saved_app_password);
+      if (HAS_SAVED_APP_PASSWORD && passEl && (!passEl.value || passEl.value.trim() === "")) {
+        passEl.value = "__SAVED__";
+      }
+      if (data.default_sender && senderEl && !senderEl.value) {
+        senderEl.value = data.default_sender;
+      }
+      if (savedHint) {
+        savedHint.style.display = HAS_SAVED_APP_PASSWORD ? "block" : "none";
+      }
+      badge.textContent = HAS_SAVED_APP_PASSWORD
+        ? "Server :8787 SẴN SÀNG (Đã nạp App Password + PDF CV)"
+        : "Server :8787 SẴN SÀNG (Kèm PDF CV)";
       badge.style.background = "#d1fae5";
       badge.style.color = "#065f46";
-      if (!silent) appendBulkLog(`[Health] Kết nối bulk_mailer.py thành công. CV Assets: ${JSON.stringify(data.cv_assets)}`);
+      if (!silent) appendBulkLog(`[Health] Kết nối bulk_mailer.py thành công (SavedPassword=${HAS_SAVED_APP_PASSWORD}). CV Assets: ${JSON.stringify(data.cv_assets)}`);
       return true;
     }
   } catch (e) {
+    HAS_SAVED_APP_PASSWORD = false;
+    if (savedHint) savedHint.style.display = "none";
     badge.textContent = "Chưa chạy python bulk_mailer.py";
     badge.style.background = "#fee2e2";
     badge.style.color = "#991b1b";
@@ -2022,28 +2113,65 @@ async function verifyAllBulkEmails() {
   }
 }
 
+async function oneClickSendAllUnsentJobs() {
+  if (BULK_SEND_STATE.running) {
+    openBulkModal();
+    showToast("Tiến trình gửi đang chạy! Xem tiến độ trong hộp Gửi Hàng Loạt.");
+    return;
+  }
+  const unsentWithMail = getAllJobs().filter(j => {
+    const st = getJobState(j.id);
+    const em = getEffectiveHrEmail(j, st);
+    return em && st.status !== "skipped" && st.status !== "sent";
+  });
+  if (unsentWithMail.length === 0) {
+    openBulkModal();
+    showToast("Tất cả job có Email HR đã được gửi hoặc bỏ qua!");
+    return;
+  }
+  for (const j of unsentWithMail) SELECTED_IDS.add(j.id);
+  saveState();
+  openBulkModal();
+  await checkLocalMailerHealth(true);
+  await sendBulkViaLocalServer("live");
+}
+
 async function sendBulkViaLocalServer(mode) {
   if (BULK_SEND_STATE.running) {
     showToast("Đang có tiến trình chạy! Hãy bấm Tạm dừng hoặc Dừng hẳn trước.");
     return;
   }
 
-  const jobs = getBulkJobsList();
+  const fastMode = Boolean(document.getElementById("smtp-fast-mode")?.checked);
+  let jobs = getBulkJobsList();
+  if (mode === "live" && fastMode) {
+    const beforeLen = jobs.length;
+    jobs = jobs.filter(j => getJobState(j.id).status !== "sent");
+    const skippedSent = beforeLen - jobs.length;
+    if (skippedSent > 0) {
+      appendBulkLog(`[FastMode] Tự động bỏ qua ${skippedSent} job đã gửi trước đó.`);
+    }
+  }
+
   if (jobs.length === 0) {
-    showToast("Chưa chọn job nào để gửi!");
+    showToast("Chưa còn job chưa gửi nào trong đợt này!");
     return;
   }
 
   const senderEmail = document.getElementById("smtp-sender").value.trim() || WORK_EMAIL;
-  const appPass = document.getElementById("smtp-app-pass").value.trim();
+  let appPass = document.getElementById("smtp-app-pass").value.trim();
+  if (!appPass && HAS_SAVED_APP_PASSWORD) appPass = "__SAVED__";
   const attachCv = document.getElementById("smtp-attach-cv").value;
 
   if (mode === "live") {
     if (!appPass) {
-      showToast("Cần nhập Gmail App Password (16 ký tự) để gửi thật!");
+      showToast("Cần nhập Gmail App Password (16 ký tự) hoặc kết nối server local!");
       return;
     }
-    if (!confirm(`Xác nhận gửi THẬT ${jobs.length} email tới HR kèm PDF CV?\n(Hệ thống tự động chặn địa chỉ lỗi trước khi gửi và cho phép Tạm dừng / Dừng hẳn bất cứ lúc nào)`)) return;
+    const noteQuota = jobs.length > 400
+      ? `\nLưu ý Gmail cá nhân giới hạn ~450-500 thư/ngày: hệ thống sẽ tự Tạm dừng nếu chạm hạn mức để ngày mai bấm Tiếp tục (Resume) mà không gửi trùng.`
+      : "";
+    if (!confirm(`Xác nhận gửi THẬT ${jobs.length} email tới HR kèm PDF CV?\n(Có thanh tiến trình + nút Tạm dừng / Dừng hẳn bất cứ lúc nào)${noteQuota}`)) return;
   } else if (mode === "test_self" && !appPass) {
     showToast("Cần nhập Gmail App Password để gửi thử vào hộp thư của chính bạn!");
     return;
@@ -2075,11 +2203,11 @@ async function sendBulkViaLocalServer(mode) {
     statusText: `${modeTitle} (0/${items.length})...`,
     detailText: "Đang khởi tạo phiên gửi trên localhost:8787..."
   });
-  appendBulkLog(`[SMTP:${mode}] Bắt đầu xử lý lần lượt ${items.length} email...`);
+  appendBulkLog(`[SMTP:${mode}] Bắt đầu xử lý lần lượt ${items.length} email (FastMode=${fastMode})...`);
   await sendBulkControlSignal("reset");
 
   const baseUrl = getBulkMailerBaseUrl();
-  const stepDelayMs = mode === "live" ? 450 : 25;
+  const stepDelayMs = mode === "live" ? (fastMode ? 250 : 450) : 20;
   let fatalStop = false;
 
   try {
@@ -2107,6 +2235,7 @@ async function sendBulkViaLocalServer(mode) {
             reuse_session: true,
             close_after: i === items.length - 1,
             verify_before_send: true,
+            fast_send: fastMode,
             reset_control: i === 0,
             items: [item]
           })
@@ -2150,6 +2279,19 @@ async function sendBulkViaLocalServer(mode) {
         } else {
           BULK_SEND_STATE.failed++;
           setBulkRowStatusTag(r.id, `<span style="color:#b91c1c;font-weight:700;">🛑 ${escapeHtml(r.detail)}</span>`);
+          if (res.quota_exceeded || r.quota_exceeded) {
+            BULK_SEND_STATE.done = Math.max(0, BULK_SEND_STATE.done - 1);
+            BULK_SEND_STATE.failed = Math.max(0, BULK_SEND_STATE.failed - 1);
+            BULK_SEND_STATE.paused = true;
+            updateBulkProgressUI({
+              statusText: `⏸ Tạm dừng do chạm giới hạn Gmail (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})`,
+              detailText: "Các mail đã gửi đã được lưu. Khi Gmail mở lại quota, bấm Tiếp tục (Resume) để gửi tiếp!",
+              stateClass: "is-paused"
+            });
+            showToast("Gmail chạm giới hạn gửi trong ngày — Đã tự Tạm dừng an toàn!");
+            i--;
+            continue;
+          }
         }
       } else {
         BULK_SEND_STATE.done++;
@@ -2256,97 +2398,112 @@ async function liveScrapeInBrowser() {
   const btn = document.getElementById("btn-live-scrape");
   const origHtml = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang quét Remotive & Himalayas...`;
-
-  let added = 0;
-  const existingKeys = new Set(getAllJobs().map(j => `${j.company}_${j.title}`.toLowerCase().replace(/[^a-z0-9]/g, "")));
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang quét 1.000+ Job toàn cầu...`;
 
   try {
-    const [remRes, himRes] = await Promise.allSettled([
-      fetch("https://remotive.com/api/remote-jobs?limit=35").then(r => r.json()),
-      fetch("https://himalayas.app/jobs/api?limit=30").then(r => r.json())
-    ]);
+    const baseUrl = getBulkMailerBaseUrl();
+    const crawlResp = await fetch(`${baseUrl}/api/crawl-worldwide`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_total: 1250 })
+    });
+    if (crawlResp.ok) {
+      const cres = await crawlResp.json();
+      if (cres && cres.ok) {
+        const freshJson = await fetch(`data/jobs_data.json?t=${Date.now()}`).then(r => r.json());
+        if (freshJson && Array.isArray(freshJson.jobs)) {
+          HUB_DATA = freshJson;
+          CUSTOM_JOBS = CUSTOM_JOBS.filter(j => j && !String(j.id || "").startsWith("browser_"));
+          saveCustomJobs();
+          renderAll();
+          showToast(`Đã quét & cập nhật ${HUB_DATA.jobs.length} công việc thật kèm Email trên toàn cầu!`);
+          return;
+        }
+      }
+    }
+  } catch (e) {}
+
+  // Offline / GitHub Pages browser fallback: query HN Algolia Hiring threads + Remotive directly (verbatim email posts)
+  let added = 0;
+  const existingEmails = new Set(getAllJobs().map(j => String(j.hr_email || "").toLowerCase()));
+
+  try {
+    const hnStories = await fetch("https://hn.algolia.com/api/v1/search_by_date?query=%22Ask%20HN%3A%20Who%20is%20hiring%22&tags=story&hitsPerPage=12")
+      .then(r => r.json())
+      .then(d => (d.hits || []).filter(h => (h.num_comments || 0) > 40).slice(0, 4))
+      .catch(() => []);
 
     const candidates = [];
-    if (remRes.status === "fulfilled" && remRes.value?.jobs) {
-      for (const j of remRes.value.jobs) {
+    const threadDatas = await Promise.allSettled(
+      hnStories.map(s => fetch(`https://hn.algolia.com/api/v1/search_by_date?tags=comment,story_${s.objectID}&hitsPerPage=400`).then(r => r.json()))
+    );
+
+    threadDatas.forEach((tr, ti) => {
+      if (tr.status !== "fulfilled" || !tr.value?.hits) return;
+      const sid = String(hnStories[ti].objectID);
+      for (const c of tr.value.hits) {
+        if (String(c.parent_id) !== sid) continue;
+        const txt = String(c.comment_text || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        if (txt.length < 60 || /^\s*(seeking work|for hire|seeking freelance)/i.test(txt)) continue;
+        const emMatch = txt.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+        if (!emMatch) continue;
+        const em = emMatch[0].replace(/[.,;:)>\]"']+$/, "");
+        if (/example\.|test\.|\.png|\.jpg|noreply/i.test(em)) continue;
+        const parts = txt.split("|").map(p => p.trim()).filter(Boolean);
         candidates.push({
-          source: "Remotive Live",
-          title: j.title,
-          company: j.company_name,
-          location: j.candidate_required_location || "Worldwide",
-          salary: j.salary || "Remote USD",
-          url: j.url,
-          desc: (j.description || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+          source: "HN Global Live",
+          company: (parts[0] || "Global Startup").slice(0, 56),
+          title: (parts[1] && !/^http/i.test(parts[1]) ? parts[1] : `Remote / AI Role at ${(parts[0] || "Startup").slice(0, 30)}`).slice(0, 76),
+          location: parts[2] && /remote|onsite|hybrid|worldwide/i.test(parts[2]) ? parts[2].slice(0, 44) : "Global / Remote",
+          salary: "Competitive USD",
+          url: `https://news.ycombinator.com/item?id=${c.objectID}`,
+          email: em,
+          desc: txt
         });
       }
-    }
-    if (himRes.status === "fulfilled" && himRes.value?.jobs) {
-      for (const j of himRes.value.jobs) {
-        candidates.push({
-          source: "Himalayas Live",
-          title: j.title,
-          company: j.companyName,
-          location: (j.locationRestrictions || ["Worldwide"]).join(", "),
-          salary: j.minSalary ? `${j.minSalary}-${j.maxSalary} ${j.currency || "USD"}` : "Remote Competitive",
-          url: j.applicationLink || j.guid,
-          desc: (j.description || j.excerpt || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
-        });
-      }
-    }
+    });
 
     for (const c of candidates) {
-      if (!c.title || !c.company) continue;
-      const tl = c.title.toLowerCase();
-      const ll = c.location.toLowerCase();
-      if (/senior|sr\.|principal|staff|director|vp|head of|chief|lead|architect|physician|nurse|therapist|spanish|french|german/.test(tl)) continue;
-      if (!/worldwide|anywhere|apac|asia|vietnam|global|remote/.test(ll) && /united states|usa|canada|uk|europe|germany/.test(ll)) continue;
+      if (existingEmails.has(c.email.toLowerCase())) continue;
+      existingEmails.add(c.email.toLowerCase());
+      const tl = `${c.title} ${c.desc.slice(0, 200)}`.toLowerCase();
+      let cat = "ai_vibe";
+      if (/tutor|teaching|mentor/.test(tl)) cat = "tutor_ta";
+      else if (/freelance|contractor|hourly/.test(tl)) cat = "freelance_gig";
+      else if (/finance|analyst|accounting|data/.test(tl)) cat = "finance";
+      else if (/assistant|operations|product manager|hr|recruiter/.test(tl)) cat = "assistant_pm";
+      else if (/sales|marketing|growth|esg|climate/.test(tl)) cat = "sales_esg";
 
-      const key = `${c.company}_${c.title}`.toLowerCase().replace(/[^a-z0-9]/g, "");
-      if (existingKeys.has(key)) continue;
-      existingKeys.add(key);
-
-      let cat = "assistant_pm";
-      if (/tutor|teacher|instructor|mentor/.test(tl)) cat = "tutor_ta";
-      else if (/admission|enrollment|counselor/.test(tl)) cat = "admissions_sale";
-      else if (/freelance|contractor|gig/.test(tl)) cat = "freelance_gig";
-      else if (/n8n|automation|chatbot|ai |no-code|vibe|video|qa|tester|prompt|web/.test(tl)) cat = "ai_vibe";
-      else if (/stock|equity|trading|quant|investment/.test(tl)) cat = "stock";
-      else if (/finance|financial|accounting|data analyst|analytics/.test(tl)) cat = "finance";
-      else if (/sales|business dev|bdr|sdr|growth|marketing|e-commerce|esg|sustainab|climate|support/.test(tl)) cat = "sales_esg";
-
-      const m = c.desc.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
-      const resolvedEmail = m ? m[0] : resolveClientHrEmail(c.company, c.url, c.desc, "Global Remote");
       const job = buildDynamicJobObject({
         id: `browser_${Date.now()}_${added}`,
         title: c.title,
         company: c.company,
         category: cat,
         market: "Global Remote",
-        location: c.location.slice(0, 46),
+        location: c.location,
         work_mode: "Remote Quốc tế",
-        salary: c.salary.slice(0, 36),
+        salary: c.salary,
         source: c.source,
         apply_url: c.url,
-        hr_email: resolvedEmail,
-        hr_email_source: m ? "explicit" : "domain_resolved",
+        hr_email: c.email,
+        hr_email_source: "explicit_verbatim",
         desc: c.desc,
         is_live_scraped: true
       });
       CUSTOM_JOBS.unshift(job);
       added++;
-      if (added >= 10) break;
+      if (added >= 250) break;
     }
 
     if (added > 0) {
       saveCustomJobs();
       renderAll();
-      showToast(`Đã scrape thêm ${added} remote jobs mới trực tiếp từ API!`);
+      showToast(`Đã quét thêm ${added} job toàn cầu có sẵn Email thật!`);
     } else {
-      showToast("Các remote jobs mới nhất trên API đã có sẵn trong danh sách.");
+      showToast("Toàn bộ 1.000+ job thật mới nhất đã có sẵn trong danh sách.");
     }
   } catch (err) {
-    showToast("Trình duyệt bị chặn CORS khi gọi API; hãy chạy 'python scraper.py' để cập nhật toàn bộ nguồn!");
+    showToast("Lỗi khi quét nguồn ngoài; hãy đảm bảo kết nối Internet!");
   } finally {
     btn.disabled = false;
     btn.innerHTML = origHtml;
@@ -2671,4 +2828,5 @@ function escapeAttr(str) {
 document.addEventListener("DOMContentLoaded", () => {
   loadPersistence();
   renderAll();
+  checkLocalMailerHealth(true);
 });

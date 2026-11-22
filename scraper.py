@@ -16,7 +16,25 @@ import re
 import html
 from datetime import datetime
 from pathlib import Path
-import requests
+import urllib.request
+try:
+    import requests
+except ImportError:
+    class _ShimResp:
+        def __init__(self, status, raw):
+            self.status_code = status
+            self.ok = 200 <= status < 300
+            self.content = raw
+            self.text = raw.decode("utf-8", errors="ignore")
+        def json(self):
+            return json.loads(self.text)
+    class _ShimRequests:
+        @staticmethod
+        def get(url, headers=None, timeout=12):
+            req = urllib.request.Request(url, headers=headers or {"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return _ShimResp(resp.status, resp.read())
+    requests = _ShimRequests()
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"

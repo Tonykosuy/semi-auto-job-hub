@@ -20,6 +20,7 @@ import mimetypes
 import os
 import re
 import smtplib
+import socket
 import subprocess
 import threading
 import time
@@ -29,6 +30,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 ROOT_DIR = Path(__file__).resolve().parent
+SECRET_FILE = ROOT_DIR / ".env.local"
 ASSETS_DIR = ROOT_DIR / "assets"
 CV_FILES = {
     "vi": ASSETS_DIR / "CV_Phuc_Nguyen_VI.pdf",
@@ -40,6 +42,7 @@ DEFAULT_SMTP_PORT = 587
 DEFAULT_SENDER = "tonyphucnguyen.work@gmail.com"
 
 MX_CACHE: Dict[str, List[str]] = {}
+DNS_CACHE: Dict[str, bool] = {}
 VERIFY_CACHE: Dict[str, Dict[str, Any]] = {}
 CACHE_LOCK = threading.Lock()
 CONTROL_LOCK = threading.Lock()
@@ -47,6 +50,45 @@ SMTP_LOCK = threading.Lock()
 
 BULK_CONTROL: Dict[str, bool] = {"paused": False, "stopped": False}
 SMTP_POOL: Dict[str, Any] = {"server": None, "sender": "", "password": "", "host": "", "port": 0}
+
+
+def load_local_smtp_secret() -> Dict[str, str]:
+    """Load git-ignored local Gmail App Password credentials from .env.local if present."""
+    if not SECRET_FILE.is_file():
+        return {}
+    try:
+        raw = json.loads(SECRET_FILE.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            return {
+                "sender_email": str(raw.get("sender_email") or "").strip(),
+                "app_password": str(raw.get("app_password") or "").replace(" ", "").strip(),
+            }
+    except Exception:
+        pass
+    return {}
+
+
+def dns_domain_exists(domain: str) -> bool:
+    """Fast DNS check to block totally nonexistent domains without port-25 latency."""
+    dom = (domain or "").strip().lower()
+    if not dom or "." not in dom:
+        return False
+    with CACHE_LOCK:
+        if dom in DNS_CACHE:
+            return DNS_CACHE[dom]
+        if dom in MX_CACHE and MX_CACHE[dom]:
+            DNS_CACHE[dom] = True
+            return True
+    ok = bool(get_mx_hosts(dom))
+    if not ok:
+        try:
+            socket.getaddrinfo(dom, None)
+            ok = True
+        except Exception:
+            ok = False
+    with CACHE_LOCK:
+        DNS_CACHE[dom] = ok
+    return ok
 
 
 def get_mx_hosts(domain: str) -> List[str]:
@@ -248,9 +290,13 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
       }
     """
     mode = str(payload.get("mode", "dry_run")).strip().lower()
-    sender_email = str(payload.get("sender_email") or DEFAULT_SENDER).strip()
+    saved_secret = load_local_smtp_secret()
+    sender_email = str(payload.get("sender_email") or saved_secret.get("sender_email") or DEFAULT_SENDER).strip()
     sender_name = str(payload.get("sender_name") or "Nguyen Tran Tien Phuc").strip()
-    app_password = str(payload.get("app_password") or "").replace(" ", "").strip()
+    raw_pass = str(payload.get("app_password") or "").replace(" ", "").strip()
+    if not raw_pass or raw_pass == "__SAVED__":
+        raw_pass = saved_secret.get("app_password", "")
+    app_password = raw_pass
     smtp_host = str(payload.get("smtp_host") or DEFAULT_SMTP_HOST).strip()
     smtp_port = int(payload.get("smtp_port") or DEFAULT_SMTP_PORT)
     attach_cv = str(payload.get("attach_cv") or "auto").strip().lower()
@@ -259,6 +305,7 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
     reuse_session = bool(payload.get("reuse_session", len(items) == 1))
     close_after = bool(payload.get("close_after", not reuse_session))
     verify_before_send = bool(payload.get("verify_before_send", True))
+    fast_send = bool(payload.get("fast_send", False))
     reset_control = bool(payload.get("reset_control", False))
 
     if reset_control:
@@ -372,20 +419,36 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
                 continue
 
             if mode == "live" and verify_before_send:
-                v = verify_recipient_mailbox(target_to)
-                if v["status"] in ("INVALID_550", "NO_MX", "INVALID_SYNTAX"):
-                    results.append(
-                        {
-                            "id": item.get("id"),
-                            "company": item.get("company", ""),
-                            "to": target_to,
-                            "subject": subj,
-                            "status": "blocked_invalid_email",
-                            "detail": f"Đã chặn gửi để tránh bounce ({v['status']}): {v['detail']}",
-                        }
-                    )
-                    continue
+                if fast_send:
+                    dom = target_to.split("@", 1)[1].lower()
+                    if not re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", target_to) or not dns_domain_exists(dom):
+                        results.append(
+                            {
+                                "id": item.get("id"),
+                                "company": item.get("company", ""),
+                                "to": target_to,
+                                "subject": subj,
+                                "status": "blocked_invalid_email",
+                                "detail": f"Đã chặn gửi: Tên miền {dom} không tồn tại trên DNS",
+                            }
+                        )
+                        continue
+                else:
+                    v = verify_recipient_mailbox(target_to)
+                    if v["status"] in ("INVALID_550", "NO_MX", "INVALID_SYNTAX"):
+                        results.append(
+                            {
+                                "id": item.get("id"),
+                                "company": item.get("company", ""),
+                                "to": target_to,
+                                "subject": subj,
+                                "status": "blocked_invalid_email",
+                                "detail": f"Đã chặn gửi để tránh bounce ({v['status']}): {v['detail']}",
+                            }
+                        )
+                        continue
 
+            quota_hit = False
             try:
                 msg = build_email_message(
                     sender_email=sender_email,
@@ -412,16 +475,31 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
                     }
                 )
             except Exception as send_exc:
+                err_str = str(send_exc)
+                err_low = err_str.lower()
+                is_quota = any(k in err_low for k in ("5.4.5", "daily user sending quota", "sending limit", "exceeded", "421 ", "454 ", "try again later"))
                 results.append(
                     {
                         "id": item.get("id"),
                         "company": item.get("company", ""),
                         "to": target_to,
                         "subject": subj,
-                        "status": "failed",
-                        "detail": str(send_exc),
+                        "status": "quota_exceeded" if is_quota else "failed",
+                        "quota_exceeded": is_quota,
+                        "detail": f"Chạm giới hạn gửi Gmail ({err_str[:120]}) — hãy Tạm dừng và gửi tiếp ngày hôm sau." if is_quota else err_str,
                     }
                 )
+                if is_quota:
+                    quota_hit = True
+                    close_pooled_smtp()
+                    return {
+                        "ok": True,
+                        "mode": mode,
+                        "quota_exceeded": True,
+                        "sent_count": sum(1 for r in results if r["status"] == "sent"),
+                        "failed_count": sum(1 for r in results if r["status"] != "sent"),
+                        "results": results,
+                    }
 
             if idx < len(items) - 1 and delay_sec > 0:
                 time.sleep(delay_sec)
@@ -465,6 +543,7 @@ class JobHubRequestHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path.split("?")[0] == "/api/health":
+            saved = load_local_smtp_secret()
             self._send_json(
                 200,
                 {
@@ -472,7 +551,8 @@ class JobHubRequestHandler(SimpleHTTPRequestHandler):
                     "service": "Phuc Nguyen Semi-Auto Bulk Mailer",
                     "root": str(ROOT_DIR),
                     "cv_assets": check_cv_assets(),
-                    "default_sender": DEFAULT_SENDER,
+                    "default_sender": saved.get("sender_email") or DEFAULT_SENDER,
+                    "has_saved_app_password": bool(saved.get("app_password")),
                 },
             )
             return
@@ -514,6 +594,18 @@ class JobHubRequestHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(raw_eml)
             except Exception as exc:
                 self._send_json(500, {"ok": False, "error": f"Server error: {exc}"})
+            return
+
+        if clean_path == "/api/crawl-worldwide":
+            try:
+                content_len = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(content_len).decode("utf-8")) if content_len > 0 else {}
+                target_total = int(payload.get("target_total") or 1250)
+                import worldwide_crawler
+                result = worldwide_crawler.crawl_and_merge_worldwide(target_total=target_total)
+                self._send_json(200, result)
+            except Exception as exc:
+                self._send_json(500, {"ok": False, "error": f"Crawl error: {exc}"})
             return
 
         if clean_path == "/api/verify-emails":
