@@ -491,7 +491,7 @@ function renderCards(filtered) {
           </div>
 
           <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="job-direct-url-pill" title="${escapeAttr(directUrl)}">
-            <i class="fa-solid fa-link"></i> <span>Link tin gốc:</span> <code>${escapeHtml(shortUrl)}</code> <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            <i class="fa-solid fa-link"></i> <span>Link tin gốc:</span> <code class="notranslate">${escapeHtml(shortUrl)}</code> <i class="fa-solid fa-arrow-up-right-from-square"></i>
           </a>
 
           <p class="job-summary">${escapeHtml(j.summary)}</p>
@@ -575,7 +575,7 @@ function renderQueue(allJobs) {
           <span style="color:var(--primary-dark);font-weight:600;">${escapeHtml(j.company)}</span><br>
           <span style="font-size:0.75rem;color:var(--text-light);">${escapeHtml(j.work_mode)} • ${escapeHtml(j.location)}</span><br>
           <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="table-url-sub">
-            <i class="fa-solid fa-link"></i> ${escapeHtml(shortUrl)}
+            <i class="fa-solid fa-link"></i> <span class="notranslate">${escapeHtml(shortUrl)}</span>
           </a><br>
           <span style="font-size:0.74rem;color:${toEmail ? 'var(--success)' : 'var(--warning)'};font-weight:700;">
             ${toEmail ? `Email HR: ${escapeHtml(toEmail)}` : "Nộp qua Portal web"}
@@ -667,7 +667,7 @@ function renderTracker(allJobs) {
           </a><br>
           <span style="color:var(--text-muted);font-size:0.78rem;">${escapeHtml(j.company)}</span><br>
           <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="table-url-sub">
-            <i class="fa-solid fa-link"></i> ${escapeHtml(shortUrl)}
+            <i class="fa-solid fa-link"></i> <span class="notranslate">${escapeHtml(shortUrl)}</span>
           </a>
         </td>
         <td>${escapeHtml(catInfo.label)}</td>
@@ -1531,7 +1531,7 @@ function renderBulkTable() {
           <span style="font-size:0.74rem;color:#0369a1;font-weight:600;">${escapeHtml(j.company)}</span>
           <div style="font-size:0.7rem;color:#64748b;">${escapeHtml(j.work_mode)}</div>
           <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="table-url-sub">
-            <i class="fa-solid fa-link"></i> ${escapeHtml(shortUrl)}
+            <i class="fa-solid fa-link"></i> <span class="notranslate">${escapeHtml(shortUrl)}</span>
           </a>
         </td>
         <td>
