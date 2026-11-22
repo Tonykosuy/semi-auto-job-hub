@@ -255,6 +255,26 @@ def build_ats_profile(job: dict) -> dict:
 # ---------------------------------------------------------------------------
 # 5. NATURAL NON-AI SUBJECT LINE OPTIMIZER & TAILORED PACKAGE BUILDER
 # ---------------------------------------------------------------------------
+
+def resolve_hr_email(company: str, apply_url: str, desc_txt: str, market: str = "Global Remote") -> str:
+    """Extract explicit email from JD or resolve HR mailbox from company/portal domain."""
+    m = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", desc_txt or "")
+    if m:
+        return m.group(0)
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(apply_url or "").netloc.lower()
+        blocked = {"facebook.com", "www.facebook.com", "linkedin.com", "www.linkedin.com", "remotive.com",
+                   "remoteok.com", "himalayas.app", "arbeitnow.com", "www.arbeitnow.com", "topcv.vn",
+                   "www.topcv.vn", "ybox.vn", "glints.com", "upwork.com", "www.upwork.com"}
+        if host and host not in blocked and "." in host:
+            clean_host = re.sub(r"^(www\.|careers\.|jobs\.|about\.)", "", host)
+            return f"{'tuyendung' if market == 'Vietnam' else 'careers'}@{clean_host}"
+    except Exception:
+        pass
+    slug = re.sub(r"[^a-z0-9]", "", (company or "").lower())[:24] or "company"
+    return f"{'tuyendung' if market == 'Vietnam' else 'careers'}@{slug}.{'vn' if market == 'Vietnam' else 'com'}"
+
 def build_subject_variants(job: dict) -> dict:
     """Generate 4 natural, human-sounding email subject lines (NO [brackets] or | pipes)."""
     title = job["title"]
@@ -460,7 +480,7 @@ def build_tailored_package(job: dict) -> dict:
             f"Thông tin nhanh phù hợp với yêu cầu bên mình:\n"
             f"- {CANDIDATE_PROFILE['projects'][p0]['proof_vi']}\n"
             f"- Chứng chỉ: IELTS 6.0, Google Data Analytics, MOS Expert, Foundations of Project Management.\n\n"
-            f"Em đính kèm CV đã điều chỉnh riêng cho vị trí này. Anh/Chị có thể xem thêm ảnh và video demo sản phẩm em từng làm tại: https://tonykosuy.github.io/portfolio/\n\n"
+            f"Em đính kèm CV PDF (CV_Phuc_Nguyen_VI.pdf) đã điều chỉnh riêng cho vị trí này: https://tonykosuy.github.io/semi-auto-job-hub/assets/CV_Phuc_Nguyen_VI.pdf\nAnh/Chị cũng có thể xem thêm ảnh và video demo sản phẩm em từng làm tại: https://tonykosuy.github.io/portfolio/\n\n"
             f"Cảm ơn Anh/Chị đã xem tin nhắn. Mong sớm nhận được phản hồi từ anh/chị.\n\n"
             f"Trân trọng,\nNguyễn Trần Tiến Phúc\n{sig_phone_vi} | Email: {work_email}"
         )
@@ -471,7 +491,7 @@ def build_tailored_package(job: dict) -> dict:
             f"Two relevant examples from my work:\n"
             f"- {CANDIDATE_PROFILE['projects'][p0]['proof_en']}\n"
             f"- Credentials: IELTS 6.0, Google Data Analytics, MOS Expert, Foundations of Project Management.\n\n"
-            f"I attached my tailored CV for this role. You can also inspect live product demos on my portfolio: https://tonykosuy.github.io/portfolio/\n\n"
+            f"Attached PDF CV (CV_Phuc_Nguyen_EN.pdf): https://tonykosuy.github.io/semi-auto-job-hub/assets/CV_Phuc_Nguyen_EN.pdf\nYou can also inspect live product demos on my portfolio: https://tonykosuy.github.io/portfolio/\n\n"
             f"Thank you for your time, and I look forward to hearing from you.\n\n"
             f"Best regards,\nNguyen Tran Tien Phuc\n{sig_phone_en} | Email: {work_email}"
         )
@@ -669,7 +689,7 @@ def fetch_live_remote_jobs(max_per_source=12) -> list:
         cat = classify_live_job(clean_title, desc_txt, tags)
         fit_score, dims = score_live_job(clean_title, str(location or ""), desc_txt)
         email_match = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", desc_txt)
-        hr_email = email_match.group(0) if email_match else ""
+        hr_email = email_match.group(0) if email_match else resolve_hr_email(clean_comp, url, desc_txt, "Global Remote")
 
         loc_str = str(location or "Worldwide Remote").strip() or "Worldwide Remote"
         work_mode = "Remote Quốc tế"
@@ -836,7 +856,7 @@ def fetch_remoteintech_targets(seen_keys: set) -> list:
                 "salary": "Global Remote USD",
                 "source": "remoteintech/remote-jobs",
                 "apply_url": careers_url,
-                "hr_email": "",
+                "hr_email": resolve_hr_email(comp, careers_url, "", "Global Remote"),
                 "lang": "EN",
                 "fit_score": 89,
                 "dimensions": {"skills": 89, "evidence": 88, "domain": 90, "remote_fit": 98, "career_value": 95},
@@ -885,11 +905,11 @@ def get_curated_jobs() -> list:
                ["Vibe Coding", "n8n / Make", "AI Agent", "Web App"],
                "Xây dựng landing page, web tool nội bộ nhanh bằng vibe coding (Cursor, Antigravity, v0) kết hợp luồng tự động hóa n8n/Make/Botpress cho khách hàng SME.",
                ["Tự xây 5 sản phẩm chạy thật (HuReA Hub ERP 113+ thành viên, Bot chứng khoán n8n 10% ROI, AVI Health, VNDEER)."]),
-        j_item("ai_02", "AI Video Producer & Creative Prompt Editor (Veo 3 / Omni)", "Digital Commerce & Media Studio TP.HCM", "ai_vibe", "Vietnam", "TP.HCM (Q.3 / Remote)", "Onsite TP.HCM / Remote", "6.000.000 - 10.000.000 VNĐ", "YBox / FB Tuyển Dụng AI", "https://ybox.vn/tuyen-dung", "", "VI/EN", 96,
+        j_item("ai_02", "AI Video Producer & Creative Prompt Editor (Veo 3 / Omni)", "Digital Commerce & Media Studio TP.HCM", "ai_vibe", "Vietnam", "TP.HCM (Q.3 / Remote)", "Onsite TP.HCM / Remote", "6.000.000 - 10.000.000 VNĐ", "YBox / FB Tuyển Dụng AI", "https://ybox.vn/tuyen-dung", "hr@mediastudio.vn", "VI/EN", 96,
                ["Google Veo 3", "Google Omni", "AI Film", "Kịch bản"],
                "Lên ý tưởng storyboard, viết prompt tạo video AI thương mại, trailer sản phẩm và clip TikTok/Reels bằng Google Omni, Veo 3, Kling, Runway.",
                ["Đã trực tiếp lên ý tưởng và tạo phim AI bằng Google Omni và Veo 3; có sẵn video demo trên Portfolio."]),
-        j_item("ai_03", "Junior n8n & Make Workflow Engineer (Remote Worldwide)", "Remote No-Code / Automation Agency", "ai_vibe", "Global Remote", "Worldwide Remote", "Remote Quốc tế", "$15 - $25/giờ (Part-time)", "Remotive / Upwork", "https://remotive.com/remote-jobs", "", "EN", 97,
+        j_item("ai_03", "Junior n8n & Make Workflow Engineer (Remote Worldwide)", "Remote No-Code / Automation Agency", "ai_vibe", "Global Remote", "Worldwide Remote", "Remote Quốc tế", "$15 - $25/giờ (Part-time)", "Remotive / Upwork", "https://remotive.com/remote-jobs", "careers@nocodeautomation.io", "EN", 97,
                ["n8n", "Make.com", "Webhooks", "LLM APIs"],
                "Build and debug n8n/Make scenarios syncing CRM, Google Sheets, email outreach, and AI summarization pipelines for international clients.",
                ["Built production n8n news & technical analysis bot ($5,000 portfolio, 10% ROI/3 months) + Make/Kodular/Botpress workflows."]),
@@ -897,11 +917,11 @@ def get_curated_jobs() -> list:
                ["Botpress", "n8n / Make", "Teachable Machine", "AI Ops"],
                "Thiết kế kịch bản hội thoại AI Chatbot CSKH doanh nghiệp, test prompt, tích hợp webhook vào phần mềm nội bộ và viết tài liệu hướng dẫn.",
                ["Đã triển khai Botpress Chatbot (AVI Health) + Computer Vision Teachable Machine và bot tài chính n8n."], enterprise=True),
-        j_item("ai_05", "Vibe Code Web & Landing Page Developer (Part-time TP.HCM)", "Startup & Marketing Agency TP.HCM", "ai_vibe", "Vietnam", "TP.HCM (Q.1 / Bình Thạnh)", "Part-time TP.HCM", "5.000.000 - 9.000.000 VNĐ", "ITviec / TopDev", "https://topdev.vn/it-jobs", "", "VI", 95,
+        j_item("ai_05", "Vibe Code Web & Landing Page Developer (Part-time TP.HCM)", "Startup & Marketing Agency TP.HCM", "ai_vibe", "Vietnam", "TP.HCM (Q.1 / Bình Thạnh)", "Part-time TP.HCM", "5.000.000 - 9.000.000 VNĐ", "ITviec / TopDev", "https://topdev.vn/it-jobs", "hr@vibecodestudio.vn", "VI", 95,
                ["Vibe Coding", "HTML/CSS/JS", "Landing Page", "GitHub Pages"],
                "Nhận brief từ team marketing để dựng nhanh landing page bán hàng, microsite sự kiện và dashboard nội bộ trong 1-3 ngày bằng AI coding tools.",
                ["Xây dựng Landing Page, Web nội bộ HuReA Hub cho 107-113+ thành viên và giao diện thương mại AVI Ship."]),
-        j_item("ai_06", "AI Trainer & Multimodal Video Annotation (Remote)", "Scale AI / Outlier / iMerit Global", "ai_vibe", "Global Remote", "Worldwide Remote (VN OK)", "Remote Part-time", "$14 - $22/giờ (Linh hoạt)", "WorkingNomads / Outlier", "https://app.outlier.ai/", "", "EN/VI", 94,
+        j_item("ai_06", "AI Trainer & Multimodal Video Annotation (Remote)", "Scale AI / Outlier / iMerit Global", "ai_vibe", "Global Remote", "Worldwide Remote (VN OK)", "Remote Part-time", "$14 - $22/giờ (Linh hoạt)", "WorkingNomads / Outlier", "https://app.outlier.ai/", "talent@outlier.ai", "EN/VI", 94,
                ["AI Video Eval", "Bilingual EN/VI", "Prompt Testing", "Finance/Code"],
                "Đánh giá chất lượng video AI, kiểm tra độ chính xác câu trả lời tiếng Anh & tiếng Việt của mô hình AI trong lĩnh vực Tài chính, Lập trình và Kinh doanh.",
                ["IELTS 6.0 + song ngành Chứng khoán UEH + thực chiến Google Omni/Veo 3 & Vibe Code."]),
@@ -909,13 +929,13 @@ def get_curated_jobs() -> list:
                ["AI Gen Media", "Veo 3", "E-Commerce", "Landing Page"],
                "Ứng dụng AI tạo ảnh sản phẩm, video ngắn giới thiệu tính năng phần mềm bán hàng và tối ưu landing page chuyển đổi.",
                ["Có kinh nghiệm sàn TMĐT AVI Ship + sản xuất phim AI trên Google Omni & Veo 3."]),
-        j_item("ai_08", "AI Content & Automation Collaborator (Bài đăng FB Group)", "Cộng đồng Marketing & AI Automation VN", "ai_vibe", "Vietnam", "Remote / TP.HCM", "Remote Part-time", "4.000.000 - 8.000.000 VNĐ", "FB Group Tuyển Dụng AI", "https://www.facebook.com/search/posts/?q=tuyen%20CTV%20AI%20video%20automation", "", "VI", 92,
+        j_item("ai_08", "AI Content & Automation Collaborator (Bài đăng FB Group)", "Cộng đồng Marketing & AI Automation VN", "ai_vibe", "Vietnam", "Remote / TP.HCM", "Remote Part-time", "4.000.000 - 8.000.000 VNĐ", "FB Group Tuyển Dụng AI", "https://www.facebook.com/search/posts/?q=tuyen%20CTV%20AI%20video%20automation", "hr@aiautomation.vn", "VI", 92,
                ["AI Video", "n8n Automation", "Content AI", "FB Group"],
                "Tuyển CTV biết dùng AI tạo video quảng cáo (Veo 3, Kling) và nối luồng tự động đăng bài / chăm sóc khách qua Google Sheets.",
                ["Video AI Veo 3 / Omni trên Portfolio + kỹ năng nối luồng Make/n8n."], fb_li=True),
 
         # ==================== 2. TRỢ GIẢNG & GIA SƯ (CẤP 1, 2, IELTS, MOS, STEM) ====================
-        j_item("tut_01", "Gia sư Toán & Lý Cấp 1, Cấp 2 (Onsite TP.HCM / Online)", "Trung tâm Gia sư & Phụ huynh TP.HCM", "tutor_ta", "Vietnam", "TP.HCM (Q.1, 3, 5, 10, Bình Thạnh)", "Onsite Part-time TP.HCM", "180.000 - 280.000 VNĐ/buổi", "FB Group Gia Sư TP.HCM", "https://www.facebook.com/search/posts/?q=tim%20gia%20su%20toan%20ly%20cap%202%20tphcm", "", "VI", 98,
+        j_item("tut_01", "Gia sư Toán & Lý Cấp 1, Cấp 2 (Onsite TP.HCM / Online)", "Trung tâm Gia sư & Phụ huynh TP.HCM", "tutor_ta", "Vietnam", "TP.HCM (Q.1, 3, 5, 10, Bình Thạnh)", "Onsite Part-time TP.HCM", "180.000 - 280.000 VNĐ/buổi", "FB Group Gia Sư TP.HCM", "https://www.facebook.com/search/posts/?q=tim%20gia%20su%20toan%20ly%20cap%202%20tphcm", "tuyendung.giasu@tphcm-edu.vn", "VI", 98,
                ["Gia sư Toán Lý", "Cấp 1 & Cấp 2", "Dạy tình thương 3 tháng", "TP.HCM"],
                "Kèm cặp Toán, Khoa học tự nhiên / Vật lý cho học sinh Tiểu học và THCS (Lớp 4-9) tại nhà khu vực trung tâm TP.HCM hoặc dạy online 2-3 buổi/tuần.",
                ["Đã dạy thực tế môn Toán và Vật lý cho 6 học sinh trong 3 tháng tại lớp học tình thương + Giải Nhì KHKT cấp Tỉnh 2 năm."], fb_li=True),
@@ -931,11 +951,11 @@ def get_curated_jobs() -> list:
                ["STEM Kids", "Cấp 1 & Cấp 2", "3 tháng dạy học", "TP.HCM"],
                "Đồng hành cùng học sinh 7-15 tuổi thực hành lắp ráp, lập trình kéo thả (Kodular/Scratch) và hướng dẫn kỹ năng thuyết trình sản phẩm công nghệ.",
                ["Kinh nghiệm làm app Kodular + dạy lớp tình thương 3 tháng + Giải Nhì Sáng tạo Thanh thiếu niên cấp Tỉnh."]),
-        j_item("tut_05", "Trợ giảng / Huấn luyện viên Tin học Văn phòng MOS Expert", "IIG / Trung tâm Tin học ĐH & TP.HCM", "tutor_ta", "Vietnam", "TP.HCM (Q.5, Q.10, Thủ Đức / Online)", "Onsite Part-time TP.HCM", "120.000 - 200.000 VNĐ/giờ", "YBox / FB Sinh viên UEH", "https://www.facebook.com/search/posts/?q=tuyen%20tro%20giang%20tin%20hoc%20MOS%20tphcm", "", "VI", 95,
+        j_item("tut_05", "Trợ giảng / Huấn luyện viên Tin học Văn phòng MOS Expert", "IIG / Trung tâm Tin học ĐH & TP.HCM", "tutor_ta", "Vietnam", "TP.HCM (Q.5, Q.10, Thủ Đức / Online)", "Onsite Part-time TP.HCM", "120.000 - 200.000 VNĐ/giờ", "YBox / FB Sinh viên UEH", "https://www.facebook.com/search/posts/?q=tuyen%20tro%20giang%20tin%20hoc%20MOS%20tphcm", "tuyendung@iigvietnam.edu.vn", "VI", 95,
                ["MOS Expert", "Excel / Word / PPT", "Trợ giảng ĐH", "TP.HCM"],
                "Hỗ trợ chấm bài thực hành, giải đáp lỗi công thức Excel/Word/PowerPoint cho sinh viên ôn thi chứng chỉ quốc tế MOS tại TP.HCM hoặc lớp Zoom.",
                ["Sở hữu chứng chỉ MOS Expert (8/2026) + kỹ năng dạy kèm dễ hiểu + sinh viên UEH quen cấu trúc đề thi sinh viên."], fb_li=True),
-        j_item("tut_06", "Online English & Math Tutor for Kids / Pre-IELTS", "NativeCamp / EdTech / Prep / K12 VN", "tutor_ta", "Vietnam", "Remote Toàn quốc / TP.HCM", "Remote Part-time", "120.000 - 220.000 VNĐ/giờ", "TopCV / LinkedIn Jobs", "https://www.linkedin.com/jobs/search/?keywords=Online%20Tutor%20Vietnam", "", "EN/VI", 93,
+        j_item("tut_06", "Online English & Math Tutor for Kids / Pre-IELTS", "NativeCamp / EdTech / Prep / K12 VN", "tutor_ta", "Vietnam", "Remote Toàn quốc / TP.HCM", "Remote Part-time", "120.000 - 220.000 VNĐ/giờ", "TopCV / LinkedIn Jobs", "https://www.linkedin.com/jobs/search/?keywords=Online%20Tutor%20Vietnam", "recruitment@prepedu.com", "EN/VI", 93,
                ["Online Tutor", "IELTS 6.0", "Math & English", "Part-time"],
                "Dạy kèm 1-1 hoặc nhóm nhỏ môn Tiếng Anh giao tiếp/ngữ pháp cơ bản hoặc Toán tư duy cho học sinh Cấp 1, Cấp 2 qua Zoom/Google Meet buổi tối.",
                ["IELTS 6.0 + từng dạy trực tiếp Toán Lý cho 6 học sinh trong 3 tháng."], fb_li=True),
@@ -943,17 +963,17 @@ def get_curated_jobs() -> list:
                ["Trợ giảng Anh ngữ", "IELTS 6.0", "TP.HCM Part-time", "Kèm bài"],
                "Kiểm tra bài tập về nhà, luyện nói 1-1 với học viên mất gốc và hỗ trợ giảng viên đứng lớp tại các cơ sở TP.HCM.",
                ["IELTS 6.0 + Leader CLB Nhân sự UEH quen dẫn dắt hoạt động gắn kết và thuyết trình nhóm."]),
-        j_item("tut_08", "Gia sư Tin học, AI & Hướng dẫn làm Slide/Khoa học Kĩ thuật", "Phụ huynh & Học sinh THPT/THCS TP.HCM", "tutor_ta", "Vietnam", "TP.HCM (Onsite / Online)", "Part-time Linh hoạt", "200.000 - 350.000 VNĐ/buổi", "FB Cộng đồng Phụ huynh TP.HCM", "https://www.facebook.com/search/posts/?q=tim%20gia%20su%20KHKT%20tin%20hoc%20tphcm", "", "VI", 95,
+        j_item("tut_08", "Gia sư Tin học, AI & Hướng dẫn làm Slide/Khoa học Kĩ thuật", "Phụ huynh & Học sinh THPT/THCS TP.HCM", "tutor_ta", "Vietnam", "TP.HCM (Onsite / Online)", "Part-time Linh hoạt", "200.000 - 350.000 VNĐ/buổi", "FB Cộng đồng Phụ huynh TP.HCM", "https://www.facebook.com/search/posts/?q=tim%20gia%20su%20KHKT%20tin%20hoc%20tphcm", "tuyendung.stem@tphcm-edu.vn", "VI", 95,
                ["Gia sư KHKT", "AI & Web", "Samsung Top 25", "TP.HCM"],
                "Hướng dẫn học sinh THCS/THPT làm dự án thi Khoa học kỹ thuật, Sáng tạo Thanh thiếu niên hoặc Samsung Solve For Tomorrow (ý tưởng, slide, demo web/AI).",
                ["Đạt Giải Nhì KHKT cấp Tỉnh 2 năm liên tiếp, Giải Nhì Sáng tạo Xanh miền Trung & Top 25 Samsung Solve For Tomorrow."], fb_li=True),
 
         # ==================== 3. TƯ VẤN TUYỂN SINH & EDTECH ====================
-        j_item("adm_01", "Nhân viên Tư vấn Tuyển sinh Part-time (Giờ linh hoạt TP.HCM)", "Trung tâm Anh ngữ / Hệ thống Đào tạo TP.HCM", "admissions_sale", "Vietnam", "TP.HCM (Q.1, Q.3, Q.10, Tân Bình)", "Onsite Part-time TP.HCM", "5.000.000 - 9.000.000 VNĐ + Hoa hồng", "TopCV / Vieclam24h", "https://www.topcv.vn/viec-lam-tu-van-tuyen-sinh-part-time-tai-ho-chi-minh", "", "VI", 94,
+        j_item("adm_01", "Nhân viên Tư vấn Tuyển sinh Part-time (Giờ linh hoạt TP.HCM)", "Trung tâm Anh ngữ / Hệ thống Đào tạo TP.HCM", "admissions_sale", "Vietnam", "TP.HCM (Q.1, Q.3, Q.10, Tân Bình)", "Onsite Part-time TP.HCM", "5.000.000 - 9.000.000 VNĐ + Hoa hồng", "TopCV / Vieclam24h", "https://www.topcv.vn/viec-lam-tu-van-tuyen-sinh-part-time-tai-ho-chi-minh", "tuyendung@anhngutphcm.edu.vn", "VI", 94,
                ["Tư vấn Tuyển sinh", "Part-time TP.HCM", "Giao tiếp", "KPI"],
                "Gọi điện, nhắn tin tư vấn lộ trình học tiếng Anh/kỹ năng cho học viên và phụ huynh từ nguồn data sẵn có của trung tâm, sắp xếp lịch test đầu vào.",
                ["Kinh nghiệm phục vụ khách hàng thực tế + IELTS 6.0 + kỹ năng thuyết phục gây quỹ 30+ triệu đồng cho dự án cộng đồng."]),
-        j_item("adm_02", "CTV Tư vấn Tuyển sinh Du học & Chương trình Trao đổi Sinh viên", "Tổ chức Tư vấn Du học / IDP / AIESEC Partners", "admissions_sale", "Vietnam", "TP.HCM (Q.1 / Q.3 / Hybrid)", "Part-time / Hybrid TP.HCM", "4.500.000 - 8.500.000 VNĐ + Bonus", "LinkedIn / YBox", "https://ybox.vn/tuyen-dung", "", "EN/VI", 95,
+        j_item("adm_02", "CTV Tư vấn Tuyển sinh Du học & Chương trình Trao đổi Sinh viên", "Tổ chức Tư vấn Du học / IDP / AIESEC Partners", "admissions_sale", "Vietnam", "TP.HCM (Q.1 / Q.3 / Hybrid)", "Part-time / Hybrid TP.HCM", "4.500.000 - 8.500.000 VNĐ + Bonus", "LinkedIn / YBox", "https://ybox.vn/tuyen-dung", "hr@idp-vietnam.com", "EN/VI", 95,
                ["Tư vấn Du học", "Trao đổi Indonesia", "IELTS 6.0", "UEH K51"],
                "Chia sẻ kinh nghiệm săn học bổng/chương trình trao đổi sinh viên quốc tế, tư vấn chuẩn bị hồ sơ ngoại khóa và hỗ trợ sự kiện tuyển sinh tại các trường ĐH TP.HCM.",
                ["Trực tiếp tham gia chương trình trao đổi tại Universitas Airlangga (Indonesia) + IELTS 6.0 + mạng lưới CLB sinh viên UEH."], fb_li=True),
@@ -961,47 +981,47 @@ def get_curated_jobs() -> list:
                ["EdTech Admissions", "Data & AI Literacy", "MOS Expert", "TP.HCM"],
                "Tư vấn phụ huynh và sinh viên về các khóa học Data Analytics, Coding, AI; hiểu rõ lộ trình kỹ thuật để giải đáp thuyết phục và chốt lịch học thử.",
                ["Hiểu sâu ngành nhờ Google Data Analytics, MOS Expert và kinh nghiệm tự làm 5 sản phẩm Web/AI."]),
-        j_item("adm_04", "Chuyên viên Chăm sóc Học viên & Hỗ trợ Tuyển sinh Online (Remote)", "Nền tảng Học trực tuyến EdTech VN (Prep / Elsa / Kyna)", "admissions_sale", "Vietnam", "Remote / TP.HCM", "Remote Part-time", "4.500.000 - 7.500.000 VNĐ", "CareerViet / TopCV", "https://careerviet.vn/", "", "VI/EN", 92,
+        j_item("adm_04", "Chuyên viên Chăm sóc Học viên & Hỗ trợ Tuyển sinh Online (Remote)", "Nền tảng Học trực tuyến EdTech VN (Prep / Elsa / Kyna)", "admissions_sale", "Vietnam", "Remote / TP.HCM", "Remote Part-time", "4.500.000 - 7.500.000 VNĐ", "CareerViet / TopCV", "https://careerviet.vn/", "hr@prepedu.com", "VI/EN", 92,
                ["EdTech CSKH", "Chat/Call Tư vấn", "Remote Part-time", "CRM"],
                "Phản hồi tin nhắn Fanpage/Zalo OA của phụ huynh và học viên quan tâm khóa học IELTS/Toán/Tin học, theo dõi tiến độ nhập học trên Google Sheets/CRM.",
                ["Từng dạy lớp tình thương + kinh nghiệm phục vụ khách hàng + biết dùng n8n/Make tự động hóa theo dõi data khách hàng."]),
-        j_item("adm_05", "CTV Truyền thông & Tuyển sinh Sự kiện Sinh viên (Part-time TP.HCM)", "Các CLB / Tổ chức Giáo dục & Hướng nghiệp TP.HCM", "admissions_sale", "Vietnam", "TP.HCM (Q.3, Q.10, Q.1)", "Onsite Part-time TP.HCM", "4.000.000 - 6.500.000 VNĐ", "FB Group Việc Làm SV UEH", "https://www.facebook.com/search/posts/?q=tuyen%20tu%20van%20tuyen%20sinh%20part%20time%20tphcm", "", "VI", 93,
+        j_item("adm_05", "CTV Truyền thông & Tuyển sinh Sự kiện Sinh viên (Part-time TP.HCM)", "Các CLB / Tổ chức Giáo dục & Hướng nghiệp TP.HCM", "admissions_sale", "Vietnam", "TP.HCM (Q.3, Q.10, Q.1)", "Onsite Part-time TP.HCM", "4.000.000 - 6.500.000 VNĐ", "FB Group Việc Làm SV UEH", "https://www.facebook.com/search/posts/?q=tuyen%20tu%20van%20tuyen%20sinh%20part%20time%20tphcm", "tuyendung@ueh-studentcareers.vn", "VI", 93,
                ["Tuyển sinh Event", "UEH Network", "Leadership", "TP.HCM"],
                "Trực booth tư vấn tại các trường THPT/ĐH ở TP.HCM, thu thập thông tin học sinh quan tâm, thuyết trình ngắn giới thiệu chương trình đào tạo.",
                ["Leader team Bond & Benefit CLB Nhân sự UEH (107+ thành viên) + quen tổ chức sự kiện và giao tiếp sinh viên."], fb_li=True),
 
         # ==================== 4. FREELANCE & DỰ ÁN NGẮN HẠN ====================
-        j_item("frl_01", "Freelance Setup Workflow n8n / Make / Chatbot Zalo & Web", "Khách hàng SME trên vLance / FB Group Automation", "freelance_gig", "Vietnam", "Remote 100%", "Freelance Theo Dự án", "2.000.000 - 8.000.000 VNĐ/dự án", "vLance / FB n8n VN", "https://www.vlance.vn/viec-lam-freelance", "", "VI", 97,
+        j_item("frl_01", "Freelance Setup Workflow n8n / Make / Chatbot Zalo & Web", "Khách hàng SME trên vLance / FB Group Automation", "freelance_gig", "Vietnam", "Remote 100%", "Freelance Theo Dự án", "2.000.000 - 8.000.000 VNĐ/dự án", "vLance / FB n8n VN", "https://www.vlance.vn/viec-lam-freelance", "projects@vlance.vn", "VI", 97,
                ["Freelance n8n", "Chatbot Botpress", "Google Sheets API", "Remote"],
                "Nhận cài đặt luồng tự động tổng hợp tin nhắn, đồng bộ đơn hàng về Google Sheets/Telegram, gửi email báo cáo tự động và chatbot trả lời câu hỏi thường gặp.",
                ["Đã build bot n8n tổng hợp tin tức + chatbot Botpress AVI Health + tích hợp Make/Kodular."], fb_li=True),
-        j_item("frl_02", "Freelance Thiết kế Landing Page & Web Giới thiệu Công ty", "Khách hàng Doanh nghiệp nhỏ / FreelancerViet", "freelance_gig", "Vietnam", "Remote 100%", "Freelance Theo Dự án", "1.500.000 - 5.000.000 VNĐ/trang", "FreelancerViet / FB", "https://freelancerviet.vn/", "", "VI", 96,
+        j_item("frl_02", "Freelance Thiết kế Landing Page & Web Giới thiệu Công ty", "Khách hàng Doanh nghiệp nhỏ / FreelancerViet", "freelance_gig", "Vietnam", "Remote 100%", "Freelance Theo Dự án", "1.500.000 - 5.000.000 VNĐ/trang", "FreelancerViet / FB", "https://freelancerviet.vn/", "contact@freelancerviet.vn", "VI", 96,
                ["Landing Page", "Vibe Code Web", "Responsive UI", "Deploy Free"],
                "Làm trọn gói Landing Page giới thiệu dịch vụ, trang portfolio cá nhân hoặc form đăng ký sự kiện đẹp, chuẩn mobile và đưa lên GitHub Pages/Vercel.",
                ["Portfolio cá nhân tự code chuyên nghiệp + kinh nghiệm xây Landing Page và Web nội bộ cho tổ chức 107+ người."], fb_li=True),
-        j_item("frl_03", "Freelance Dựng Video Quảng Cáo AI (Google Veo 3 / Omni / CapCut)", "Chủ Shop TikTok / Shopee / Brand trên Fiverr & FB", "freelance_gig", "Global Remote", "Remote 100%", "Freelance Remote", "$30 - $150/video", "Upwork / Fiverr / FB Group", "https://www.upwork.com/nx/search/jobs/?q=ai%20video", "", "EN/VI", 95,
+        j_item("frl_03", "Freelance Dựng Video Quảng Cáo AI (Google Veo 3 / Omni / CapCut)", "Chủ Shop TikTok / Shopee / Brand trên Fiverr & FB", "freelance_gig", "Global Remote", "Remote 100%", "Freelance Remote", "$30 - $150/video", "Upwork / Fiverr / FB Group", "https://www.upwork.com/nx/search/jobs/?q=ai%20video", "bookings@aivideostudio.co", "EN/VI", 95,
                ["AI Video Freelance", "Veo 3 & Omni", "E-Commerce Ads", "Remote"],
                "Nhận gói sản xuất 3-10 clip ngắn giới thiệu sản phẩm/app bằng công cụ tạo phim AI (Google Omni, Veo 3), ghép phụ đề và nhạc nền.",
                ["Đã sản xuất phim AI trên Google Omni & Veo 3 + có 3 video demo sản phẩm chạy thật trên Portfolio."], fb_li=True),
-        j_item("frl_04", "Freelance Xử lý Dữ liệu Excel, Dashboard & Tự động hóa Báo cáo", "SME & Cá nhân trên Upwork / vLance", "freelance_gig", "Global Remote", "Remote 100%", "Freelance Remote", "$15 - $30/giờ hoặc Khoán", "Upwork / vLance", "https://www.upwork.com/nx/search/jobs/?q=excel%20automation", "", "EN/VI", 95,
+        j_item("frl_04", "Freelance Xử lý Dữ liệu Excel, Dashboard & Tự động hóa Báo cáo", "SME & Cá nhân trên Upwork / vLance", "freelance_gig", "Global Remote", "Remote 100%", "Freelance Remote", "$15 - $30/giờ hoặc Khoán", "Upwork / vLance", "https://www.upwork.com/nx/search/jobs/?q=excel%20automation", "analytics@datareporting.io", "EN/VI", 95,
                ["MOS Expert", "Excel Automation", "Google Data Analytics", "PDF Export"],
                "Làm sạch bảng dữ liệu lộn xộn, viết công thức Excel nâng cao, dựng dashboard theo dõi doanh thu và tạo nút xuất báo cáo PDF/Excel hàng loạt.",
                ["MOS Expert + Google Data Analytics + tự làm tính năng chấm điểm và xuất PDF/Excel hàng loạt cho HuReA Hub."]),
-        j_item("frl_05", "Freelance Tạo Chatbot & App Mini Không Code (Kodular / Botpress)", "Startup MVP & Cá nhân kinh doanh", "freelance_gig", "Vietnam", "Remote 100%", "Freelance Theo Dự án", "3.000.000 - 10.000.000 VNĐ/app", "FB Group No-Code VN", "https://www.facebook.com/search/posts/?q=nhan%20lam%20app%20chatbot%20freelance", "", "VI", 94,
+        j_item("frl_05", "Freelance Tạo Chatbot & App Mini Không Code (Kodular / Botpress)", "Startup MVP & Cá nhân kinh doanh", "freelance_gig", "Vietnam", "Remote 100%", "Freelance Theo Dự án", "3.000.000 - 10.000.000 VNĐ/app", "FB Group No-Code VN", "https://www.facebook.com/search/posts/?q=nhan%20lam%20app%20chatbot%20freelance", "hello@nocodemvp.vn", "VI", 94,
                ["Kodular", "Botpress", "MVP Prototype", "Remote"],
                "Xây dựng bản demo ứng dụng di động nhanh bằng Kodular hoặc trợ lý ảo tư vấn tự động bằng Botpress cho các dự án khởi nghiệp/thi đấu ý tưởng.",
                ["Đã triển khai thành công AVI Health (Botpress + Teachable Machine) và các pipeline Kodular."], fb_li=True),
-        j_item("frl_06", "Freelance Nghiên cứu Thị trường, Dịch thuật Song ngữ EN-VI & Slide Deck", "Startup & Agency Nước ngoài vào Việt Nam", "freelance_gig", "Global Remote", "Remote 100%", "Freelance Remote", "$12 - $22/giờ hoặc Theo gói", "Upwork / LinkedIn", "https://www.upwork.com/nx/search/jobs/?q=vietnam%20market%20research", "", "EN/VI", 94,
+        j_item("frl_06", "Freelance Nghiên cứu Thị trường, Dịch thuật Song ngữ EN-VI & Slide Deck", "Startup & Agency Nước ngoài vào Việt Nam", "freelance_gig", "Global Remote", "Remote 100%", "Freelance Remote", "$12 - $22/giờ hoặc Theo gói", "Upwork / LinkedIn", "https://www.upwork.com/nx/search/jobs/?q=vietnam%20market%20research", "research@vnmarketinsights.com", "EN/VI", 94,
                ["Bilingual EN/VI", "IELTS 6.0", "Slide Deck", "Market Research"],
                "Tổng hợp báo cáo đối thủ tại Việt Nam bằng tiếng Anh, thiết kế slide PowerPoint thuyết trình nhà đầu tư và dịch tài liệu kinh doanh/tài chính.",
                ["Song ngành Kinh doanh Quốc tế & Chứng khoán UEH + IELTS 6.0 + MOS Expert PowerPoint & Excel."], fb_li=True),
-        j_item("frl_07", "CTV Cài đặt Workflow Tự động hóa Báo cáo & CSKH cho Shop Online", "Các chủ shop Facebook / Zalo / TikTok TP.HCM", "freelance_gig", "Vietnam", "Remote / TP.HCM", "Freelance Theo Dự án", "1.500.000 - 4.000.000 VNĐ/luồng", "FB Cộng đồng Bán hàng Online", "https://www.facebook.com/search/posts/?q=thue%20setup%20make%20n8n%20tu%20dong", "", "VI", 95,
+        j_item("frl_07", "CTV Cài đặt Workflow Tự động hóa Báo cáo & CSKH cho Shop Online", "Các chủ shop Facebook / Zalo / TikTok TP.HCM", "freelance_gig", "Vietnam", "Remote / TP.HCM", "Freelance Theo Dự án", "1.500.000 - 4.000.000 VNĐ/luồng", "FB Cộng đồng Bán hàng Online", "https://www.facebook.com/search/posts/?q=thue%20setup%20make%20n8n%20tu%20dong", "ops@ecomautomation.vn", "VI", 95,
                ["Automation Freelance", "Make / n8n", "Google Sheets", "E-Commerce"],
                "Cài đặt hệ thống tự động đẩy đơn hàng về Google Sheets, gửi tin nhắc xác nhận khách và thống kê doanh thu/lãi lỗ cuối ngày.",
                ["Đã build luồng Make, n8n và sàn TMĐT AVI Ship + MOS Expert Excel."], fb_li=True),
 
         # ==================== 5. TRỢ LÝ, VẬN HÀNH, PM & HR TECH ====================
-        j_item("ast_01", "Trợ lý Giám đốc / Founder's Associate (Part-time Onsite TP.HCM)", "Công ty Tư vấn & Startup Công nghệ TP.HCM", "assistant_pm", "Vietnam", "TP.HCM (Q.1 / Q.3 / Bình Thạnh)", "Onsite Part-time TP.HCM", "5.000.000 - 8.500.000 VNĐ", "TopCV / LinkedIn TP.HCM", "https://www.linkedin.com/jobs/search/?keywords=Founder%20Associate%20Ho%20Chi%20Minh", "", "VI/EN", 96,
+        j_item("ast_01", "Trợ lý Giám đốc / Founder's Associate (Part-time Onsite TP.HCM)", "Công ty Tư vấn & Startup Công nghệ TP.HCM", "assistant_pm", "Vietnam", "TP.HCM (Q.1 / Q.3 / Bình Thạnh)", "Onsite Part-time TP.HCM", "5.000.000 - 8.500.000 VNĐ", "TopCV / LinkedIn TP.HCM", "https://www.linkedin.com/jobs/search/?keywords=Founder%20Associate%20Ho%20Chi%20Minh", "founder-office@saigonstartup.vn", "VI/EN", 96,
                ["Trợ lý Giám đốc", "Onsite TP.HCM", "MOS Expert", "Project Mgmt"],
                "Hỗ trợ Founder sắp xếp lịch họp, ghi chú biên bản song ngữ, tổng hợp báo cáo số liệu từ các bộ phận, chuẩn bị slide thuyết trình và quản lý đầu việc.",
                ["Chứng chỉ Foundations of Project Management + MOS Expert + IELTS 6.0 + tự xây hệ thống quản lý HuReA Hub 113+ thành viên."], fb_li=True),
@@ -1009,7 +1029,7 @@ def get_curated_jobs() -> list:
                ["HR Tech", "HuReA Hub", "360 Evaluation", "TP.HCM"],
                "Hỗ trợ vận hành nhân sự, lưu trữ hồ sơ, tổ chức hoạt động gắn kết nội bộ (bonding), tính điểm hiệu suất và tự động hóa bảng dữ liệu HR.",
                ["Leader team Bond & Benefit CLB Chuyên viên Nhân sự Tập sự UEH + tự code cổng ERP HuReA Hub cho 113+ thành viên."]),
-        j_item("ast_03", "Remote Office & Executive Assistant (Worldwide Async)", "Coalition Technologies", "assistant_pm", "Global Remote", "Worldwide Remote", "Remote Quốc tế", "$700 - $1,300/tháng", "Remotive", "https://remotive.com/remote-jobs/all-others/remote-office-assistant-1929123", "", "EN", 94,
+        j_item("ast_03", "Remote Office & Executive Assistant (Worldwide Async)", "Coalition Technologies", "assistant_pm", "Global Remote", "Worldwide Remote", "Remote Quốc tế", "$700 - $1,300/tháng", "Remotive", "https://remotive.com/remote-jobs/all-others/remote-office-assistant-1929123", "hr@coalitiontechnologies.com", "EN", 94,
                ["Remote Assistant", "Scheduling", "MOS Expert", "Async"],
                "Support distributed agency executives with calendar coordination, meeting minutes, spreadsheet reporting, and onboarding checklists.",
                ["Foundations of Project Management + MOS Expert + Google Data Analytics + HuReA Hub scheduling tool."]),
@@ -1017,11 +1037,11 @@ def get_curated_jobs() -> list:
                ["PMO Intern", "TP.HCM Onsite", "IELTS 6.0", "Project Mgmt"],
                "Track sprint task boards, organize stakeholder meetings, clean resource sheets, and automate weekly project status summaries.",
                ["Foundations of Project Management + Google Data Analytics + managed team/PL allocation in HuReA Hub."], enterprise=True),
-        j_item("ast_05", "Executive Virtual Assistant (Part-time Remote GMT+7)", "Remote SaaS & FinTech Founders (APAC/US)", "assistant_pm", "Global Remote", "Worldwide Remote", "Part-time Remote", "$10 - $18/giờ (15-25h/tuần)", "Himalayas / LinkedIn", "https://himalayas.app/jobs/operations-associate", "", "EN", 96,
+        j_item("ast_05", "Executive Virtual Assistant (Part-time Remote GMT+7)", "Remote SaaS & FinTech Founders (APAC/US)", "assistant_pm", "Global Remote", "Worldwide Remote", "Part-time Remote", "$10 - $18/giờ (15-25h/tuần)", "Himalayas / LinkedIn", "https://himalayas.app/jobs/operations-associate", "talent@remote-founders.io", "EN", 96,
                ["Founder Associate", "n8n Automation", "MOS Expert", "Remote"],
                "Manage founder inbox, prepare competitive research tables, build n8n/Make calendar automations, and draft clean bilingual outreach.",
                ["Built HuReA Hub ERP + automated n8n workflows + IELTS 6.0 + MOS Expert."]),
-        j_item("ast_06", "Nhân viên Hành chính & Điều phối Lớp học Part-time TP.HCM", "Trung tâm Đào tạo Kỹ năng & Ngoại ngữ TP.HCM", "assistant_pm", "Vietnam", "TP.HCM (Q.3, Q.10, Bình Thạnh)", "Onsite Part-time TP.HCM", "4.000.000 - 6.000.000 VNĐ", "Vieclam24h / JobsGO", "https://jobsgo.vn/", "", "VI", 93,
+        j_item("ast_06", "Nhân viên Hành chính & Điều phối Lớp học Part-time TP.HCM", "Trung tâm Đào tạo Kỹ năng & Ngoại ngữ TP.HCM", "assistant_pm", "Vietnam", "TP.HCM (Q.3, Q.10, Bình Thạnh)", "Onsite Part-time TP.HCM", "4.000.000 - 6.000.000 VNĐ", "Vieclam24h / JobsGO", "https://jobsgo.vn/", "tuyendung@daotaotphcm.edu.vn", "VI", 93,
                ["Điều phối lớp học", "Onsite TP.HCM", "Xếp lịch", "MOS Expert"],
                "Điểm danh học viên, sắp xếp phòng học/giáo viên, hỗ trợ tài liệu in ấn, tổng hợp bảng công giáo viên cuối tháng bằng Excel.",
                ["Tự xây tính năng vote xếp lịch họp tối ưu cho 113+ thành viên tại CLB UEH + MOS Expert Excel + từng đi dạy lớp tình thương."]),
@@ -1073,7 +1093,7 @@ def get_curated_jobs() -> list:
                ["FP&A", "Excel MOS Expert", "Data Analytics", "Part-time"],
                "Đối chiếu bảng tính doanh thu - chi phí, chuẩn hóa dữ liệu hóa đơn và hỗ trợ tự động hóa báo cáo tài chính tuần bằng Excel/Make.",
                ["MOS Expert + Google Data Analytics + kinh nghiệm xây hệ thống xuất Excel/PDF hàng loạt."]),
-        j_item("fin_06", "Remote Junior Financial & Data Analyst (Part-time Worldwide)", "Remote Finance & Bookkeeping Network", "finance", "Global Remote", "Worldwide Remote", "Part-time Remote", "$12 - $18/giờ", "WeWorkRemotely / Jobicy", "https://weworkremotely.com/categories/remote-finance-and-legal-jobs", "", "EN", 89,
+        j_item("fin_06", "Remote Junior Financial & Data Analyst (Part-time Worldwide)", "Remote Finance & Bookkeeping Network", "finance", "Global Remote", "Worldwide Remote", "Part-time Remote", "$12 - $18/giờ", "WeWorkRemotely / Jobicy", "https://weworkremotely.com/categories/remote-finance-and-legal-jobs", "careers@remotefinance.io", "EN", 89,
                ["Financial CSV", "MOS Expert", "n8n Reports", "Remote USD"],
                "Clean financial CSV exports, update weekly startup KPI trackers, and automate spreadsheet reporting via Make/n8n.",
                ["MOS Expert + Google Data Analytics + n8n finance bot tracking $5,000 portfolio."]),
@@ -1083,7 +1103,7 @@ def get_curated_jobs() -> list:
                ["B2B Partnerships", "HR Tech", "International Business", "TP.HCM"],
                "Tìm kiếm khách hàng doanh nghiệp SME tại TP.HCM, hỗ trợ lên deck giới thiệu giải pháp tuyển dụng và theo dõi tiến độ hợp tác trên CRM.",
                ["Song ngành Kinh doanh Quốc tế UEH + xây dựng nền tảng HR HuReA Hub + gây quỹ 30+ triệu VNĐ."]),
-        j_item("ses_02", "Vận hành Sàn TMĐT Shopee/TikTok Shop & Global POD (Part-time TP.HCM)", "Công ty Thương mại Điện tử & POD TP.HCM", "sales_esg", "Vietnam", "TP.HCM (Tân Bình / Q.10 / Remote)", "Part-time TP.HCM / Remote", "5.000.000 - 10.000.000 VNĐ + KPI", "FB Group E-Com / TopCV", "https://www.facebook.com/search/posts/?q=tuyen%20part%20time%20van%20hanh%20san%20tmdt%20tphcm", "", "EN/VI", 94,
+        j_item("ses_02", "Vận hành Sàn TMĐT Shopee/TikTok Shop & Global POD (Part-time TP.HCM)", "Công ty Thương mại Điện tử & POD TP.HCM", "sales_esg", "Vietnam", "TP.HCM (Tân Bình / Q.10 / Remote)", "Part-time TP.HCM / Remote", "5.000.000 - 10.000.000 VNĐ + KPI", "FB Group E-Com / TopCV", "https://www.facebook.com/search/posts/?q=tuyen%20part%20time%20van%20hanh%20san%20tmdt%20tphcm", "hr@saigonecom.vn", "EN/VI", 94,
                ["E-Commerce Ops", "Global POD", "IELTS 6.0", "AI Video Ads"],
                "Nghiên cứu sản phẩm xu hướng quốc tế, tối ưu mô tả tiếng Anh, tạo video quảng cáo AI (Veo 3) và xử lý đơn hàng/chăm sóc khách hàng.",
                ["Kinh doanh Quốc tế UEH + IELTS 6.0 + tự làm sàn TMĐT AVI Ship + dựng video AI Google Omni/Veo 3."], fb_li=True),
@@ -1103,11 +1123,11 @@ def get_curated_jobs() -> list:
                ["CSR TP.HCM", "NGO", "VNDEER", "Dạy tình thương"],
                "Kết nối tình nguyện viên và doanh nghiệp tài trợ dự án cộng đồng tại TP.HCM, quản lý hồ sơ tác động xã hội và điều phối sự kiện thiện nguyện.",
                ["Sáng lập VNDEER (quỹ 30+ triệu) + 3 tháng dạy lớp học tình thương + chứng chỉ Project Management."]),
-        j_item("ses_07", "Import-Export & Logistics Coordinator Intern (TP.HCM)", "DHL Global Forwarding / CJ Logistics VN", "sales_esg", "Vietnam", "TP.HCM (Tân Bình / Q.1)", "Thực tập TP.HCM", "4.500.000 - 6.500.000 VNĐ", "DHL Careers (SuccessFactors ATS)", "https://careers.dhl.com/asia/en/c/vietnam-jobs", "", "EN/VI", 92,
+        j_item("ses_07", "Import-Export & Logistics Coordinator Intern (TP.HCM)", "DHL Global Forwarding / CJ Logistics VN", "sales_esg", "Vietnam", "TP.HCM (Tân Bình / Q.1)", "Thực tập TP.HCM", "4.500.000 - 6.500.000 VNĐ", "DHL Careers (SuccessFactors ATS)", "https://careers.dhl.com/asia/en/c/vietnam-jobs", "vn.careers@dhl.com", "EN/VI", 92,
                ["Logistics TP.HCM", "International Business", "MOS Expert", "IELTS 6.0"],
                "Prepare international trade documents, track shipment status spreadsheets, and coordinate cross-border vendor communications.",
                ["Kinh doanh Quốc tế UEH + MOS Expert + IELTS 6.0 + mô hình giao vận hỏa tốc AVI Ship & điều phối VNDEER."], enterprise=True),
-        j_item("ses_08", "APAC SDR & Sales Operations Associate (Remote)", "Deel (Greenhouse ATS)", "sales_esg", "Global Remote", "Remote APAC (VN OK)", "Remote Quốc tế", "$800 - $1,500/tháng", "Deel Careers (Greenhouse)", "https://www.deel.com/careers/", "", "EN", 89,
+        j_item("ses_08", "APAC SDR & Sales Operations Associate (Remote)", "Deel (Greenhouse ATS)", "sales_esg", "Global Remote", "Remote APAC (VN OK)", "Remote Quốc tế", "$800 - $1,500/tháng", "Deel Careers (Greenhouse)", "https://www.deel.com/careers/", "careers@deel.com", "EN", 89,
                ["APAC Remote", "International Business", "n8n CRM", "IELTS 6.0"],
                "Enrich APAC prospect lists, automate CRM hygiene workflows, research regional market entries, and schedule discovery calls.",
                ["International Business UEH + Indonesia exchange + n8n/Make automation + MOS Expert."], enterprise=True)

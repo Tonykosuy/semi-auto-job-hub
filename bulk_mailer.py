@@ -281,7 +281,44 @@ class JobHubRequestHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self) -> None:
-        if self.path.split("?")[0] == "/api/bulk-send":
+        clean_path = self.path.split("?")[0]
+        if clean_path == "/api/download-eml":
+            try:
+                content_len = int(self.headers.get("Content-Length", "0"))
+                if content_len <= 0 or content_len > 2 * 1024 * 1024:
+                    self._send_json(400, {"ok": False, "error": "Payload size invalid."})
+                    return
+                payload = json.loads(self.rfile.read(content_len).decode("utf-8"))
+                sender_email = str(payload.get("sender_email") or DEFAULT_SENDER).strip()
+                sender_name = str(payload.get("sender_name") or "Nguyen Tran Tien Phuc").strip()
+                to_email = str(payload.get("to") or "").strip()
+                subject = str(payload.get("subject") or "Job Application").strip()
+                body = str(payload.get("body") or "").strip()
+                attach_cv = str(payload.get("attach_cv") or "auto").strip().lower()
+                job_lang = str(payload.get("lang") or "vi").strip()
+                msg = build_email_message(
+                    sender_email=sender_email,
+                    sender_name=sender_name,
+                    to_email=to_email,
+                    subject=subject,
+                    body=body,
+                    attach_cv=attach_cv,
+                    job_lang=job_lang,
+                )
+                msg["X-Unsent"] = "1"
+                raw_eml = msg.as_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "message/rfc822")
+                self.send_header("Content-Disposition", 'attachment; filename="application_draft.eml"')
+                self.send_header("Content-Length", str(len(raw_eml)))
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(raw_eml)
+            except Exception as exc:
+                self._send_json(500, {"ok": False, "error": f"Server error: {exc}"})
+            return
+
+        if clean_path == "/api/bulk-send":
             try:
                 content_len = int(self.headers.get("Content-Length", "0"))
                 if content_len <= 0 or content_len > 5 * 1024 * 1024:

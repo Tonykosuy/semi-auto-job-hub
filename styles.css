@@ -1705,6 +1705,120 @@ button {
   display: block;
 }
 
+/* ===== CV ATTACHMENT PANEL IN TAB 4 (EMAIL DISPATCHER) ===== */
+.cv-attach-box {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid #93c5fd;
+  background: linear-gradient(135deg, #f0f9ff 0%, #eff6ff 100%);
+}
+
+.cv-attach-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.cv-attach-title {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: #0c4a6e;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cv-attach-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.cv-attach-file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.cv-attach-file-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cv-attach-pdf-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  background: #fee2e2;
+  color: #dc2626;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.cv-attach-file-name {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.cv-attach-file-sub {
+  font-size: 0.74rem;
+  color: #475569;
+}
+
+.cv-attach-lang-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.cv-inline-preview-wrap {
+  margin-top: 10px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  text-align: center;
+  padding: 8px;
+}
+
+.cv-inline-preview-wrap img {
+  width: 100%;
+  max-height: 440px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  border-radius: 6px;
+}
+
+.em-source-hint {
+  font-size: 0.75rem;
+  color: #0369a1;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 @media print {
   .bulk-floating-bar,
   .ats-coverage-box,

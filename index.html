@@ -405,6 +405,7 @@
                 <div class="form-field">
                   <label>Gửi tới (Email HR / Tuyển dụng):</label>
                   <input type="text" id="em-to" class="form-input" placeholder="VD: tuyendung@company.com (hoặc dán từ bài FB/LinkedIn)" oninput="saveEmailEdits()">
+                  <div id="em-source-hint" class="em-source-hint"></div>
                 </div>
 
                 <div class="subject-variants-box">
@@ -424,9 +425,41 @@
                   <input type="text" id="em-subject" class="form-input" oninput="saveEmailEdits()">
                 </div>
                 <div class="form-field">
-                  <label>Nội dung Email (Đã gắn link Portfolio & khử văn phong AI):</label>
+                  <label>Nội dung Email (Đã gắn link Portfolio, link CV PDF & khử văn phong AI):</label>
                   <div id="em-ai-banner" class="ai-guard-banner ai-guard-pass" style="margin-bottom:8px;"></div>
-                  <textarea id="em-body" class="editor-textarea" style="min-height:220px;" oninput="saveEmailEdits()"></textarea>
+                  <textarea id="em-body" class="editor-textarea" style="min-height:200px;" oninput="saveEmailEdits()"></textarea>
+                </div>
+
+                <!-- MATCHED CV PDF ATTACHMENT BOX -->
+                <div class="cv-attach-box" id="em-cv-attachment-panel">
+                  <div class="cv-attach-header">
+                    <span class="cv-attach-title"><i class="fa-solid fa-paperclip"></i> File CV PDF Đính Kèm Tương Ứng</span>
+                    <span class="cv-attach-badge" id="em-cv-match-badge">Tự động khớp: CV Tiếng Anh</span>
+                  </div>
+                  <div class="cv-attach-file-row">
+                    <div class="cv-attach-file-meta">
+                      <div class="cv-attach-pdf-icon"><i class="fa-solid fa-file-pdf"></i></div>
+                      <div>
+                        <div class="cv-attach-file-name" id="em-cv-file-name">CV_Phuc_Nguyen_EN.pdf</div>
+                        <div class="cv-attach-file-sub" id="em-cv-file-sub">PDF chuẩn ATS • Tự động đính kèm khi tải .EML hoặc gửi SMTP</div>
+                      </div>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                      <button type="button" class="btn btn-outline btn-sm" onclick="toggleInlineEmailCvPreview()" id="em-cv-preview-btn">
+                        <i class="fa-solid fa-eye"></i> Xem CV
+                      </button>
+                      <a id="em-cv-download-link" href="assets/CV_Phuc_Nguyen_EN.pdf" download="CV_Phuc_Nguyen_EN.pdf" class="btn btn-primary btn-sm">
+                        <i class="fa-solid fa-download"></i> Tải PDF
+                      </a>
+                    </div>
+                  </div>
+                  <div class="cv-attach-lang-row">
+                    <button type="button" class="btn btn-sm btn-primary" id="em-cv-lang-en" onclick="setEmailCvLang('en')">🇬🇧 Đính kèm CV Tiếng Anh (EN)</button>
+                    <button type="button" class="btn btn-sm btn-outline" id="em-cv-lang-vi" onclick="setEmailCvLang('vi')">🇻🇳 Đính kèm CV Tiếng Việt (VI)</button>
+                  </div>
+                  <div class="cv-inline-preview-wrap" id="em-cv-inline-preview" style="display:none;">
+                    <img id="em-cv-inline-img" src="assets/CV_ENG.png" alt="CV Preview">
+                  </div>
                 </div>
               </div>
             </div>
@@ -440,10 +473,13 @@
 
                 <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:16px;">
                   <button class="btn btn-primary" onclick="sendViaGmail()">
-                    <i class="fa-brands fa-google"></i> Bấm Gửi Qua Gmail Web (Soạn sẵn Toàn bộ)
+                    <i class="fa-brands fa-google"></i> Mở Gmail Web + Tải Sẵn File CV PDF
+                  </button>
+                  <button class="btn btn-success" onclick="downloadCurrentJobEml()">
+                    <i class="fa-solid fa-paperclip"></i> Tải Nháp Email Đã Đính Kèm Sẵn CV (.EML)
                   </button>
                   <button class="btn btn-accent-bulk" onclick="addCurrentJobAndOpenBulk()">
-                    <i class="fa-solid fa-layer-group"></i> Đưa Job Này Vào Hàng Gửi Hàng Loạt
+                    <i class="fa-solid fa-layer-group"></i> Gửi Trực Tiếp / Hàng Loạt Kèm PDF CV (SMTP :8787)
                   </button>
                   <button class="btn btn-outline" onclick="sendViaMailto()">
                     <i class="fa-solid fa-envelope"></i> Mở Ứng dụng Mail Mặc định (mailto:)

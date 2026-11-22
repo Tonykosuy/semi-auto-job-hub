@@ -83,6 +83,49 @@ let ACTIVE_VIEW = "cards";
 let CURRENT_JOB_ID = null;
 let CURRENT_CV_LANG = "en";
 let CURRENT_CL_LANG = "en";
+let CURRENT_EMAIL_CV_LANG = "en";
+
+function getEffectiveHrEmail(job, st) {
+  const saved = st && typeof st.customEmail === "string" ? st.customEmail.trim() : "";
+  if (saved) return saved;
+  return (job && job.hr_email ? String(job.hr_email).trim() : "");
+}
+
+function getMatchedCvLang(job, st) {
+  if (st && (st.customCvLang === "vi" || st.customCvLang === "en")) return st.customCvLang;
+  if (job && (job.attached_cv_lang === "vi" || job.attached_cv_lang === "en")) return job.attached_cv_lang;
+  const isVi = (job && job.market === "Vietnam") && ((job.lang || "VI/EN") !== "EN");
+  return isVi ? "vi" : "en";
+}
+
+function getCvMetaByLang(lang) {
+  const isVi = lang === "vi";
+  return {
+    lang: isVi ? "vi" : "en",
+    file: isVi ? "CV_Phuc_Nguyen_VI.pdf" : "CV_Phuc_Nguyen_EN.pdf",
+    pdfPath: isVi ? "assets/CV_Phuc_Nguyen_VI.pdf" : "assets/CV_Phuc_Nguyen_EN.pdf",
+    pngPath: isVi ? "assets/CV_VIE.png" : "assets/CV_ENG.png",
+    liveUrl: isVi
+      ? "https://tonykosuy.github.io/semi-auto-job-hub/assets/CV_Phuc_Nguyen_VI.pdf"
+      : "https://tonykosuy.github.io/semi-auto-job-hub/assets/CV_Phuc_Nguyen_EN.pdf",
+    label: isVi ? "CV Tiếng Việt (VI)" : "CV Tiếng Anh (EN)"
+  };
+}
+
+function resolveClientHrEmail(company, applyUrl, desc, market) {
+  const m = String(desc || "").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+  if (m) return m[0];
+  try {
+    const host = new URL(applyUrl || "").hostname.toLowerCase();
+    const portals = ["facebook.com","www.facebook.com","linkedin.com","www.linkedin.com","remotive.com","remoteok.com","himalayas.app","arbeitnow.com","www.arbeitnow.com","topcv.vn","www.topcv.vn","ybox.vn","glints.com","upwork.com","www.upwork.com"];
+    if (host && !portals.includes(host) && host.includes(".")) {
+      const cleanHost = host.replace(/^(www\.|careers\.|jobs\.|about\.)/, "");
+      return `${market === "Vietnam" ? "tuyendung" : "careers"}@${cleanHost}`;
+    }
+  } catch (e) {}
+  const slug = String(company || "company").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 24) || "company";
+  return `${market === "Vietnam" ? "tuyendung" : "careers"}@${slug}.${market === "Vietnam" ? "vn" : "com"}`;
+}
 
 // --------------------------------------------------------------------------
 // INITIALIZATION & PERSISTENCE
@@ -93,7 +136,18 @@ function loadPersistence() {
     if (rawState) {
       const sanitizedState = rawState.replace(/pn852007@gmail\.com/gi, WORK_EMAIL);
       JOB_STATE = JSON.parse(sanitizedState);
-      if (sanitizedState !== rawState) saveState();
+      let mutated = sanitizedState !== rawState;
+      for (const [jid, st] of Object.entries(JOB_STATE)) {
+        if (st && typeof st.customEmail === "string" && !st.customEmail.trim()) {
+          delete st.customEmail;
+          mutated = true;
+        }
+        if (st && typeof st.customBody === "string" && !st.customBody.includes("CV_Phuc_Nguyen_")) {
+          delete st.customBody;
+          mutated = true;
+        }
+      }
+      if (mutated) saveState();
     }
   } catch (e) { JOB_STATE = {}; }
 
@@ -365,7 +419,7 @@ function renderCards(filtered) {
     else if (st === "sent") statusBadge = `<span class="badge badge-status-sent"><i class="fa-solid fa-paper-plane"></i> Đã gửi Mail</span>`;
     else if (st === "interview" || st === "offer") statusBadge = `<span class="badge badge-status-interview"><i class="fa-solid fa-trophy"></i> Phỏng vấn/Offer</span>`;
 
-    const effectiveEmail = stObj.customEmail !== undefined ? stObj.customEmail : (j.hr_email || "");
+    const effectiveEmail = getEffectiveHrEmail(j, stObj);
     const emailBadge = effectiveEmail
       ? `<span class="badge badge-email"><i class="fa-solid fa-at"></i> ${escapeHtml(effectiveEmail)}</span>`
       : `<span class="badge badge-portal"><i class="fa-solid fa-link"></i> Nộp qua Portal</span>`;
@@ -468,7 +522,7 @@ function renderQueue(allJobs) {
     const st = getJobState(j.id);
     const subj = st.customSubject || j.tailored.email_subject;
     const body = st.customBody || j.tailored.email_body;
-    const toEmail = st.customEmail !== undefined ? st.customEmail : (j.hr_email || "");
+    const toEmail = getEffectiveHrEmail(j, st);
     const isSel = SELECTED_IDS.has(j.id);
     const cov = j.ats_profile?.coverage_pct || 90;
 
@@ -725,12 +779,20 @@ function openStudio(jobId, initialTab = "fit") {
   const prefLang = (job.lang || "EN").startsWith("VI") ? "vi" : "en";
   CURRENT_CV_LANG = prefLang;
   CURRENT_CL_LANG = prefLang;
+  CURRENT_EMAIL_CV_LANG = getMatchedCvLang(job, st);
   syncCvControlButtons();
   renderTailoredCV();
   renderCoverLetterPane();
 
-  // Tab 4: Email + Subject Variants
-  document.getElementById("em-to").value = st.customEmail !== undefined ? st.customEmail : (job.hr_email || "");
+  // Tab 4: Email + Subject Variants + Matched PDF CV Attachment
+  const effectiveTo = getEffectiveHrEmail(job, st);
+  document.getElementById("em-to").value = effectiveTo;
+  const srcHintEl = document.getElementById("em-source-hint");
+  if (srcHintEl) {
+    srcHintEl.innerHTML = job.hr_email_source === "explicit"
+      ? `<i class="fa-solid fa-circle-check" style="color:#059669;"></i> Email trích xuất trực tiếp từ tin tuyển dụng`
+      : `<i class="fa-solid fa-wand-magic-sparkles"></i> Email HR gợi ý theo tên miền công ty (có thể chỉnh sửa trước khi gửi)`;
+  }
   document.getElementById("em-subject").value = st.customSubject || job.tailored.email_subject;
   document.getElementById("em-body").value = st.customBody || job.tailored.email_body;
   document.getElementById("em-portal-link").href = job.apply_url || "#";
@@ -738,6 +800,7 @@ function openStudio(jobId, initialTab = "fit") {
   document.getElementById("st-notes").value = st.notes || "";
   updateSubjectStylePills(job, document.getElementById("em-subject").value);
   updateAiBanner("em-ai-banner", document.getElementById("em-body").value);
+  renderEmailCvAttachmentCard(job);
 
   switchStudioTabByName(initialTab);
   document.getElementById("studio-backdrop").classList.add("open");
@@ -1127,25 +1190,188 @@ function addCurrentJobAndOpenBulk() {
   openBulkModal();
 }
 
+function renderEmailCvAttachmentCard(job) {
+  const meta = getCvMetaByLang(CURRENT_EMAIL_CV_LANG);
+  const badgeEl = document.getElementById("em-cv-match-badge");
+  const nameEl = document.getElementById("em-cv-file-name");
+  const subEl = document.getElementById("em-cv-file-sub");
+  const dlLink = document.getElementById("em-cv-download-link");
+  const enBtn = document.getElementById("em-cv-lang-en");
+  const viBtn = document.getElementById("em-cv-lang-vi");
+  const imgEl = document.getElementById("em-cv-inline-img");
+
+  if (badgeEl) {
+    badgeEl.textContent = meta.lang === "vi" ? "Tự động khớp: CV Tiếng Việt" : "Tự động khớp: CV Tiếng Anh";
+  }
+  if (nameEl) nameEl.textContent = meta.file;
+  if (subEl) subEl.textContent = `${meta.label} • Chuẩn ATS • Tự động đính kèm khi tải .EML hoặc gửi SMTP`;
+  if (dlLink) {
+    dlLink.href = meta.pdfPath;
+    dlLink.setAttribute("download", meta.file);
+  }
+  if (enBtn && viBtn) {
+    enBtn.className = `btn btn-sm ${meta.lang === "en" ? "btn-primary" : "btn-outline"}`;
+    viBtn.className = `btn btn-sm ${meta.lang === "vi" ? "btn-primary" : "btn-outline"}`;
+  }
+  if (imgEl) imgEl.src = meta.pngPath;
+}
+
+function setEmailCvLang(lang) {
+  CURRENT_EMAIL_CV_LANG = lang === "vi" ? "vi" : "en";
+  if (CURRENT_JOB_ID) {
+    const job = getAllJobs().find(j => j.id === CURRENT_JOB_ID);
+    JOB_STATE[CURRENT_JOB_ID] = Object.assign({}, getJobState(CURRENT_JOB_ID), { customCvLang: CURRENT_EMAIL_CV_LANG });
+    const meta = getCvMetaByLang(CURRENT_EMAIL_CV_LANG);
+    const bodyEl = document.getElementById("em-body");
+    if (bodyEl) {
+      let body = bodyEl.value;
+      body = body.replace(/CV_Phuc_Nguyen_(?:EN|VI)\.pdf/g, meta.file);
+      bodyEl.value = body;
+      saveEmailEdits();
+    }
+    if (job) renderEmailCvAttachmentCard(job);
+  }
+  showToast(`Đã chọn đính kèm ${getCvMetaByLang(CURRENT_EMAIL_CV_LANG).file}!`);
+}
+
+function toggleInlineEmailCvPreview() {
+  const wrap = document.getElementById("em-cv-inline-preview");
+  const btn = document.getElementById("em-cv-preview-btn");
+  if (!wrap) return;
+  const showing = wrap.style.display !== "none";
+  wrap.style.display = showing ? "none" : "block";
+  if (btn) {
+    btn.innerHTML = showing
+      ? `<i class="fa-solid fa-eye"></i> Xem CV`
+      : `<i class="fa-solid fa-eye-slash"></i> Ẩn Preview CV`;
+  }
+}
+
+function triggerCvPdfDownload(cvLang) {
+  const meta = getCvMetaByLang(cvLang);
+  const a = document.createElement("a");
+  a.href = meta.pdfPath;
+  a.download = meta.file;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function downloadCurrentJobEml() {
+  if (!CURRENT_JOB_ID) return;
+  saveEmailEdits();
+  const job = getAllJobs().find(j => j.id === CURRENT_JOB_ID);
+  const st = getJobState(CURRENT_JOB_ID);
+  const to = document.getElementById("em-to").value.trim() || getEffectiveHrEmail(job, st);
+  const subj = document.getElementById("em-subject").value;
+  const body = document.getElementById("em-body").value;
+  const meta = getCvMetaByLang(CURRENT_EMAIL_CV_LANG);
+
+  try {
+    const baseUrl = getBulkMailerBaseUrl();
+    const resp = await fetch(`${baseUrl}/api/download-eml`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sender_email: WORK_EMAIL,
+        sender_name: "Nguyen Tran Tien Phuc",
+        to,
+        subject: subj,
+        body,
+        attach_cv: meta.lang,
+        lang: meta.lang
+      })
+    });
+    if (resp.ok) {
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(job?.company || "application").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 30)}_${meta.lang.toUpperCase()}.eml`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast(`Đã tải file nháp .EML kèm sẵn ${meta.file}! Nhấp đúp để mở gửi ngay.`);
+      return;
+    }
+  } catch (e) {}
+
+  // Client-side MIME .eml builder fallback (works on GitHub Pages without localhost server)
+  try {
+    const pdfResp = await fetch(meta.pdfPath);
+    const buf = await pdfResp.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    const b64 = btoa(bin).replace(/(.{76})/g, "$1\r\n");
+    const boundary = "----=_TKJobHubBoundary_" + Date.now();
+    const eml = [
+      `From: Nguyen Tran Tien Phuc <${WORK_EMAIL}>`,
+      `To: ${to}`,
+      `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subj)))}?=`,
+      `X-Unsent: 1`,
+      `MIME-Version: 1.0`,
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+      ``,
+      `--${boundary}`,
+      `Content-Type: text/plain; charset="utf-8"`,
+      `Content-Transfer-Encoding: 8bit`,
+      ``,
+      body,
+      ``,
+      `--${boundary}`,
+      `Content-Type: application/pdf; name="${meta.file}"`,
+      `Content-Disposition: attachment; filename="${meta.file}"`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      b64,
+      `--${boundary}--`,
+      ``
+    ].join("\r\n");
+    const blob = new Blob([eml], { type: "message/rfc822" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(job?.company || "application").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 30)}_${meta.lang.toUpperCase()}.eml`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`Đã tải file nháp .EML kèm sẵn ${meta.file}!`);
+  } catch (err) {
+    showToast("Không tạo được file .EML, hãy dùng nút Tải PDF CV ở bên cạnh.");
+  }
+}
+
 function sendViaGmail() {
   if (!CURRENT_JOB_ID) return;
   const to = document.getElementById("em-to").value.trim();
   const subj = document.getElementById("em-subject").value;
   const body = document.getElementById("em-body").value;
-  dispatchGmailCompose(CURRENT_JOB_ID, to, subj, body);
+  dispatchGmailCompose(CURRENT_JOB_ID, to, subj, body, CURRENT_EMAIL_CV_LANG);
 }
 
 function quickDispatchGmail(jobId) {
   const job = getAllJobs().find(j => j.id === jobId);
   if (!job) return;
   const st = getJobState(jobId);
-  const to = st.customEmail !== undefined ? st.customEmail : (job.hr_email || "");
+  const to = getEffectiveHrEmail(job, st);
   const subj = st.customSubject || job.tailored.email_subject;
   const body = st.customBody || job.tailored.email_body;
-  dispatchGmailCompose(jobId, to, subj, body);
+  const cvLang = getMatchedCvLang(job, st);
+  dispatchGmailCompose(jobId, to, subj, body, cvLang);
 }
 
-function dispatchGmailCompose(jobId, to, subj, body) {
+function dispatchGmailCompose(jobId, to, subj, body, cvLang = null) {
+  const job = getAllJobs().find(j => j.id === jobId);
+  const st = getJobState(jobId);
+  const matchedLang = cvLang || getMatchedCvLang(job, st);
+  const meta = getCvMetaByLang(matchedLang);
+
+  // Trigger download of matched PDF CV so it is right on browser bar to drag into Gmail
+  triggerCvPdfDownload(matchedLang);
+
   const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&authuser=${encodeURIComponent(WORK_EMAIL)}&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
   window.open(gmailUrl, "_blank");
   const nowStr = new Date().toLocaleString("vi-VN");
@@ -1153,7 +1379,7 @@ function dispatchGmailCompose(jobId, to, subj, body) {
   if (CURRENT_JOB_ID === jobId && document.getElementById("st-status-select")) {
     document.getElementById("st-status-select").value = "sent";
   }
-  showToast(`Đã mở Gmail (${WORK_EMAIL}) soạn sẵn! Nhớ đính kèm file PDF CV và bấm Send.`);
+  showToast(`Đã mở Gmail & tải sẵn ${meta.file}! Kéo file CV từ thanh tải xuống vào Gmail hoặc dùng .EML / SMTP.`);
 }
 
 function sendViaMailto() {
@@ -1221,7 +1447,7 @@ function renderBulkTable() {
 
   tbody.innerHTML = jobs.map((j, idx) => {
     const st = getJobState(j.id);
-    const toVal = st.customEmail !== undefined ? st.customEmail : (j.hr_email || "");
+    const toVal = getEffectiveHrEmail(j, st);
     const subjVal = st.customSubject || j.tailored.email_subject;
     const bodyVal = st.customBody || j.tailored.email_body;
     const flags = detectSubjectRoboticPatterns(subjVal).concat(detectAiSigns(bodyVal));
@@ -1334,7 +1560,7 @@ function launchGmailWave(startIdx, endIdx) {
   let opened = 0;
   slice.forEach((j, i) => {
     const st = getJobState(j.id);
-    const to = (st.customEmail !== undefined ? st.customEmail : (j.hr_email || "")).trim();
+    const to = getEffectiveHrEmail(j, st);
     const subj = st.customSubject || j.tailored.email_subject;
     const body = st.customBody || j.tailored.email_body;
     const url = `https://mail.google.com/mail/?view=cm&fs=1&authuser=${encodeURIComponent(WORK_EMAIL)}&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
@@ -1444,10 +1670,10 @@ async function sendBulkViaLocalServer(mode) {
     return {
       id: j.id,
       company: j.company,
-      to: (st.customEmail !== undefined ? st.customEmail : (j.hr_email || "")).trim(),
+      to: getEffectiveHrEmail(j, st),
       subject: st.customSubject || j.tailored.email_subject,
       body: st.customBody || j.tailored.email_body,
-      lang: j.lang || "vi"
+      lang: getMatchedCvLang(j, st)
     };
   });
 
@@ -1525,18 +1751,21 @@ function submitCustomJob() {
 
   const isGlobal = workMode.includes("Quốc tế");
   const isRemote = workMode.toLowerCase().includes("remote");
+  const market = isGlobal ? "Global Remote" : "Vietnam";
+  const resolvedEmail = hrEmail || resolveClientHrEmail(company, applyUrl, desc, market);
   const job = buildDynamicJobObject({
     id: `custom_${Date.now()}`,
     title,
     company,
     category: cat,
-    market: isGlobal ? "Global Remote" : "Vietnam",
+    market,
     location: isRemote ? "Remote 100%" : "TP.HCM (Onsite / Part-time)",
     work_mode: workMode,
     salary,
     source: "Custom JD (/apply)",
     apply_url: applyUrl,
-    hr_email: finalEmail,
+    hr_email: resolvedEmail,
+    hr_email_source: hrEmail ? "explicit" : "domain_resolved",
     desc,
     is_live_scraped: false
   });
@@ -1613,6 +1842,7 @@ async function liveScrapeInBrowser() {
       else if (/sales|business dev|bdr|sdr|growth|marketing|e-commerce|esg|sustainab|climate|support/.test(tl)) cat = "sales_esg";
 
       const m = c.desc.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+      const resolvedEmail = m ? m[0] : resolveClientHrEmail(c.company, c.url, c.desc, "Global Remote");
       const job = buildDynamicJobObject({
         id: `browser_${Date.now()}_${added}`,
         title: c.title,
@@ -1624,7 +1854,8 @@ async function liveScrapeInBrowser() {
         salary: c.salary.slice(0, 36),
         source: c.source,
         apply_url: c.url,
-        hr_email: m ? m[0] : "",
+        hr_email: resolvedEmail,
+        hr_email_source: m ? "explicit" : "domain_resolved",
         desc: c.desc,
         is_live_scraped: true
       });
@@ -1709,7 +1940,7 @@ function computeClientAtsProfile(title, company, url, desc, skills) {
   };
 }
 
-function buildDynamicJobObject({ id, title, company, category, market, location, work_mode, salary, source, apply_url, hr_email, desc, is_live_scraped }) {
+function buildDynamicJobObject({ id, title, company, category, market, location, work_mode, salary, source, apply_url, hr_email, hr_email_source, desc, is_live_scraped }) {
   const isVi = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(title + desc);
   const catMaps = {
     ai_vibe: {
@@ -1776,12 +2007,14 @@ function buildDynamicJobObject({ id, title, company, category, market, location,
   const sigPhoneEn = isVnMarket ? `Phone: ${PHONE_VN}` : PHONE_FOREIGN;
   const sigPhoneVi = isVnMarket ? `SĐT/Zalo: ${PHONE_VN}` : PHONE_FOREIGN;
 
+  const cvMeta = getCvMetaByLang(isVi ? "vi" : "en");
   const clEn = cleanAiSignsText(
     `Dear ${company} Hiring Team,\n\n` +
     `I am applying for the ${title} position at ${company}. I am a second-year dual-major student in Stock Market and International Business at UEH (Ho Chi Minh City), and I also completed an exchange program in Sustainable Business at Universitas Airlangga.\n\n` +
     `Relevant examples from my work:\n` +
     `- ${m.ev}\n` +
     `- Certifications: IELTS 6.0, Google Data Analytics, MOS Expert, and Foundations of Project Management.\n\n` +
+    `Attached PDF CV (${cvMeta.file}): ${cvMeta.liveUrl}\n` +
     `You can inspect working examples and demos at https://tonykosuy.github.io/portfolio/.\n\n` +
     `Thank you for your time and consideration.\n\nBest regards,\nNguyen Tran Tien Phuc\n${sigPhoneEn} | Email: ${WORK_EMAIL}`
   );
@@ -1791,6 +2024,7 @@ function buildDynamicJobObject({ id, title, company, category, market, location,
     `Kinh nghiệm thực tế của em phù hợp với công việc này:\n` +
     `- ${m.sumVi}\n` +
     `- Chứng chỉ: IELTS 6.0, Google Data Analytics, MOS Expert, Foundations of Project Management.\n\n` +
+    `File CV PDF đính kèm (${cvMeta.file}): ${cvMeta.liveUrl}\n` +
     `Anh/Chị có thể xem sản phẩm thực tế của em tại Portfolio: https://tonykosuy.github.io/portfolio/. Rất mong được trao đổi thêm cùng Anh/Chị.\n\n` +
     `Trân trọng,\nNguyễn Trần Tiến Phúc\n${sigPhoneVi} | Email: ${WORK_EMAIL}`
   );
@@ -1824,7 +2058,11 @@ function buildDynamicJobObject({ id, title, company, category, market, location,
     salary,
     source,
     apply_url,
-    hr_email,
+    hr_email: hr_email || resolveClientHrEmail(company, apply_url, desc, market),
+    hr_email_source: hr_email_source || "domain_resolved",
+    attached_cv_lang: cvMeta.lang,
+    attached_cv_file: cvMeta.file,
+    attached_cv_url: cvMeta.liveUrl,
     lang: isVi ? "VI/EN" : "EN",
     fit_score: 91,
     dimensions: { skills: 92, evidence: 90, domain: 91, remote_fit: 94, career_value: 91 },
@@ -1908,7 +2146,7 @@ function exportTrackerCSV() {
     const row = [
       j.id, j.title, j.company, j.category, j.work_mode, j.location,
       j.fit_score, j.ats_profile?.vendor || "Direct", j.ats_profile?.coverage_pct || "",
-      st.status, st.customEmail !== undefined ? st.customEmail : (j.hr_email || ""), j.apply_url, st.sentAt || "", st.notes || ""
+      st.status, getEffectiveHrEmail(j, st), j.apply_url, st.sentAt || "", st.notes || ""
     ].map(v => `"${String(v).replace(/"/g, '""')}"`);
     lines.push(row.join(","));
   }
