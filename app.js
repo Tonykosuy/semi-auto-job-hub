@@ -127,6 +127,26 @@ function resolveClientHrEmail(company, applyUrl, desc, market) {
   return `${market === "Vietnam" ? "tuyendung" : "careers"}@${slug}.${market === "Vietnam" ? "vn" : "com"}`;
 }
 
+function getDirectJobUrl(job) {
+  const raw = job && job.apply_url ? String(job.apply_url).trim() : "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const q = encodeURIComponent(`${job?.title || "job"} ${job?.company || ""}`.trim());
+  return `https://www.google.com/search?q=${q}`;
+}
+
+function formatShortJobUrl(url) {
+  const safe = /^https?:\/\//i.test(String(url || "").trim()) ? String(url).trim() : "";
+  if (!safe) return "google.com/search";
+  try {
+    const u = new URL(safe);
+    const full = `${u.hostname.replace(/^www\./, "")}${u.pathname}${u.search}`;
+    const cleaned = full.replace(/\/$/, "");
+    return cleaned.length > 48 ? cleaned.slice(0, 45) + "..." : cleaned;
+  } catch (e) {
+    return safe.replace(/^https?:\/\//, "").slice(0, 48);
+  }
+}
+
 // --------------------------------------------------------------------------
 // INITIALIZATION & PERSISTENCE
 // --------------------------------------------------------------------------
@@ -433,6 +453,8 @@ function renderCards(filtered) {
       : "";
 
     const imgSrc = j.snapshot_img || makeInlineSnapshotUri(j);
+    const directUrl = getDirectJobUrl(j);
+    const shortUrl = formatShortJobUrl(directUrl);
 
     return `
       <article class="job-card status-${st} ${isSel ? "is-selected" : ""}">
@@ -457,12 +479,20 @@ function renderCards(filtered) {
             ${statusBadge}
           </div>
 
-          <h3 class="job-title">${escapeHtml(j.title)}</h3>
+          <h3 class="job-title">
+            <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="job-title-link" title="Mở trực tiếp: ${escapeAttr(directUrl)}">
+              ${escapeHtml(j.title)} <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </a>
+          </h3>
           <div class="job-company-line">
             <span><i class="fa-solid fa-building"></i> ${escapeHtml(j.company)}</span>
             <span>•</span>
             <span><i class="fa-solid fa-location-dot"></i> ${escapeHtml(j.location)}</span>
           </div>
+
+          <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="job-direct-url-pill" title="${escapeAttr(directUrl)}">
+            <i class="fa-solid fa-link"></i> <span>Link tin gốc:</span> <code>${escapeHtml(shortUrl)}</code> <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          </a>
 
           <p class="job-summary">${escapeHtml(j.summary)}</p>
 
@@ -473,7 +503,9 @@ function renderCards(filtered) {
 
         <div class="job-card-footer">
           <div class="decision-row">
-            <span style="font-size:0.75rem;color:var(--text-light);font-weight:600;">Nguồn: ${escapeHtml(j.source)}</span>
+            <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="job-source-link" title="Mở link nguồn: ${escapeAttr(directUrl)}">
+              Nguồn: ${escapeHtml(j.source)} <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </a>
             <div class="decision-btns">
               <button class="btn btn-sm ${st === 'approved' ? 'btn-success' : 'btn-outline'}" onclick="toggleQuickApprove('${escapeAttr(j.id)}')">
                 <i class="fa-solid fa-check"></i> ${st === 'approved' ? 'Đã duyệt' : 'Duyệt gửi'}
@@ -491,6 +523,9 @@ function renderCards(filtered) {
             <button class="btn btn-outline btn-sm" onclick="openStudio('${escapeAttr(j.id)}', 'email')">
               <i class="fa-solid fa-paper-plane"></i> Mail Soạn Sẵn
             </button>
+            <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm btn-job-direct" title="${escapeAttr(directUrl)}">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Mở Link Job
+            </a>
           </div>
         </div>
       </article>
@@ -525,6 +560,8 @@ function renderQueue(allJobs) {
     const toEmail = getEffectiveHrEmail(j, st);
     const isSel = SELECTED_IDS.has(j.id);
     const cov = j.ats_profile?.coverage_pct || 90;
+    const directUrl = getDirectJobUrl(j);
+    const shortUrl = formatShortJobUrl(directUrl);
 
     return `
       <tr>
@@ -532,9 +569,14 @@ function renderQueue(allJobs) {
           <input type="checkbox" ${isSel ? "checked" : ""} onchange="toggleSelectJob('${escapeAttr(j.id)}')" style="width:16px;height:16px;cursor:pointer;">
         </td>
         <td style="min-width:200px;">
-          <strong>${escapeHtml(j.title)}</strong><br>
+          <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="table-job-link">
+            ${escapeHtml(j.title)} <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          </a><br>
           <span style="color:var(--primary-dark);font-weight:600;">${escapeHtml(j.company)}</span><br>
           <span style="font-size:0.75rem;color:var(--text-light);">${escapeHtml(j.work_mode)} • ${escapeHtml(j.location)}</span><br>
+          <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="table-url-sub">
+            <i class="fa-solid fa-link"></i> ${escapeHtml(shortUrl)}
+          </a><br>
           <span style="font-size:0.74rem;color:${toEmail ? 'var(--success)' : 'var(--warning)'};font-weight:700;">
             ${toEmail ? `Email HR: ${escapeHtml(toEmail)}` : "Nộp qua Portal web"}
           </span>
@@ -555,8 +597,8 @@ function renderQueue(allJobs) {
             <button class="btn btn-outline btn-sm" onclick="openStudio('${escapeAttr(j.id)}', 'cv')">
               <i class="fa-solid fa-file-pdf"></i> Xuất CV &amp; CL
             </button>
-            <a href="${escapeAttr(j.apply_url)}" target="_blank" class="btn btn-outline btn-sm">
-              <i class="fa-solid fa-arrow-up-right-from-square"></i> Mở Link Gốc
+            <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm btn-job-direct">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Mở Link Job
             </a>
           </div>
         </td>
@@ -615,9 +657,19 @@ function renderTracker(allJobs) {
     const st = getJobState(j.id);
     const catInfo = cats[j.category] || { label: j.category };
     const atsTxt = j.ats_profile ? `${j.ats_profile.vendor} (${j.ats_profile.coverage_pct}%)` : "Direct";
+    const directUrl = getDirectJobUrl(j);
+    const shortUrl = formatShortJobUrl(directUrl);
     return `
       <tr>
-        <td><strong>${escapeHtml(j.title)}</strong><br><span style="color:var(--text-muted);font-size:0.78rem;">${escapeHtml(j.company)}</span></td>
+        <td>
+          <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="table-job-link">
+            ${escapeHtml(j.title)} <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          </a><br>
+          <span style="color:var(--text-muted);font-size:0.78rem;">${escapeHtml(j.company)}</span><br>
+          <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="table-url-sub">
+            <i class="fa-solid fa-link"></i> ${escapeHtml(shortUrl)}
+          </a>
+        </td>
         <td>${escapeHtml(catInfo.label)}</td>
         <td>${escapeHtml(j.work_mode)}<br><span style="font-size:0.72rem;color:#1d4ed8;">${escapeHtml(atsTxt)}</span></td>
         <td><strong>${j.fit_score}%</strong></td>
@@ -631,7 +683,12 @@ function renderTracker(allJobs) {
           ${escapeHtml(st.notes || "")}
         </td>
         <td>
-          <button class="btn btn-outline btn-sm" onclick="openStudio('${escapeAttr(j.id)}', 'email')">Mở Studio</button>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" onclick="openStudio('${escapeAttr(j.id)}', 'email')">Mở Studio</button>
+            <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm btn-job-direct" title="Mở Link Job Gốc">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </a>
+          </div>
         </td>
       </tr>
     `;
@@ -773,7 +830,17 @@ function openStudio(jobId, initialTab = "fit") {
   document.getElementById("st-critique").innerHTML = (job.recruiter_critique || [])
     .map(c => `<li style="margin-bottom:6px;">${escapeHtml(c)}</li>`).join("");
   document.getElementById("st-snapshot-img").src = job.snapshot_img || makeInlineSnapshotUri(job);
-  document.getElementById("st-orig-link").href = job.apply_url || "#";
+  const directJobUrl = getDirectJobUrl(job);
+  document.getElementById("st-orig-link").href = directJobUrl;
+  const headerJobLink = document.getElementById("st-header-job-link");
+  if (headerJobLink) {
+    headerJobLink.href = directJobUrl;
+    headerJobLink.title = `Mở trực tiếp: ${directJobUrl}`;
+  }
+  const emTopLink = document.getElementById("em-top-job-link");
+  const emTopUrl = document.getElementById("em-top-job-url");
+  if (emTopLink) emTopLink.href = directJobUrl;
+  if (emTopUrl) emTopUrl.textContent = formatShortJobUrl(directJobUrl);
 
   // Default Original CV & Cover Letter language matching job
   const prefLang = (job.lang || "EN").startsWith("VI") ? "vi" : "en";
@@ -795,7 +862,7 @@ function openStudio(jobId, initialTab = "fit") {
   }
   document.getElementById("em-subject").value = st.customSubject || job.tailored.email_subject;
   document.getElementById("em-body").value = st.customBody || job.tailored.email_body;
-  document.getElementById("em-portal-link").href = job.apply_url || "#";
+  document.getElementById("em-portal-link").href = directJobUrl;
   document.getElementById("st-status-select").value = st.status || "new";
   document.getElementById("st-notes").value = st.notes || "";
   updateSubjectStylePills(job, document.getElementById("em-subject").value);
@@ -1451,14 +1518,21 @@ function renderBulkTable() {
     const subjVal = st.customSubject || j.tailored.email_subject;
     const bodyVal = st.customBody || j.tailored.email_body;
     const flags = detectSubjectRoboticPatterns(subjVal).concat(detectAiSigns(bodyVal));
+    const directUrl = getDirectJobUrl(j);
+    const shortUrl = formatShortJobUrl(directUrl);
 
     return `
       <tr>
         <td><strong>${idx + 1}</strong></td>
         <td>
-          <strong>${escapeHtml(j.title)}</strong><br>
+          <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="table-job-link">
+            ${escapeHtml(j.title)} <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          </a><br>
           <span style="font-size:0.74rem;color:#0369a1;font-weight:600;">${escapeHtml(j.company)}</span>
           <div style="font-size:0.7rem;color:#64748b;">${escapeHtml(j.work_mode)}</div>
+          <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="table-url-sub">
+            <i class="fa-solid fa-link"></i> ${escapeHtml(shortUrl)}
+          </a>
         </td>
         <td>
           <input type="text" class="bulk-inline-input" placeholder="Nhập email HR..." value="${escapeAttr(toVal)}"
@@ -1477,6 +1551,9 @@ function renderBulkTable() {
         </td>
         <td>
           <div style="display:flex;gap:4px;">
+            <a href="${escapeAttr(directUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm btn-job-direct" title="Mở Link Job Gốc">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </a>
             <button class="btn btn-outline btn-sm" onclick="closeBulkModal();openStudio('${escapeAttr(j.id)}','email')" title="Sửa chi tiết">
               <i class="fa-solid fa-pen"></i>
             </button>
