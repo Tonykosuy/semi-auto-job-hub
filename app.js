@@ -73,10 +73,14 @@ const AI_BANNED_REGEX_DEFS = [
   { pattern: /tối ưu hóa vượt trội/gi, label: "tối ưu hóa vượt trội", repl: "cải thiện rõ rệt" }
 ];
 
+const STORAGE_KEY_SELECTED_IDS = "tk_jobhub_selected_ids_v1";
+const STORAGE_KEY_SENT_EMAILS = "tk_jobhub_sent_emails_v1";
+
 let HUB_DATA = window.__JOB_HUB_DATA__ || { jobs: [], categories: {}, candidate: {}, source_radar: [] };
 let JOB_STATE = {};       // { [jobId]: { status, notes, sentAt, customEmail, customSubject, customBody, customClEn, customClVi } }
 let CUSTOM_JOBS = [];     // Browser-scraped or /apply pasted jobs
 let SELECTED_IDS = new Set(); // Selected jobs for Bulk Email Dispatch
+let SENT_EMAILS_SET = new Set(); // Persisted lowercase recipient emails already sent in live mode
 
 let ACTIVE_CAT = "all";
 let ACTIVE_VIEW = "cards";
@@ -203,6 +207,25 @@ function formatShortJobUrl(url) {
   }
 }
 
+function isJobAlreadySent(job) {
+  if (!job) return false;
+  const st = getJobState(job.id);
+  if (st.status === "sent") return true;
+  const em = getEffectiveHrEmail(job, st).toLowerCase();
+  return Boolean(em && SENT_EMAILS_SET.has(em));
+}
+
+function markJobAsSentPersist(jobId, toEmail, nowStr) {
+  const cleanEm = String(toEmail || "").trim().toLowerCase();
+  JOB_STATE[jobId] = Object.assign({}, getJobState(jobId), {
+    status: "sent",
+    sentAt: nowStr || new Date().toLocaleString("vi-VN")
+  });
+  if (cleanEm) SENT_EMAILS_SET.add(cleanEm);
+  SELECTED_IDS.delete(jobId);
+  saveState();
+}
+
 // --------------------------------------------------------------------------
 // INITIALIZATION & PERSISTENCE
 // --------------------------------------------------------------------------
@@ -232,10 +255,21 @@ function loadPersistence() {
           }
         }
       }
-      if (mutated) saveState();
+      if (mutated) localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(JOB_STATE));
     }
-    if (!schemaV3) localStorage.setItem("tk_jobhub_email_schema_v3", "1");
+    if (!schemaV3) {
+      localStorage.removeItem(STORAGE_KEY_SENT_EMAILS);
+      localStorage.setItem("tk_jobhub_email_schema_v3", "1");
+    }
   } catch (e) { JOB_STATE = {}; }
+
+  try {
+    const rawSentEmails = localStorage.getItem(STORAGE_KEY_SENT_EMAILS);
+    if (rawSentEmails) {
+      const arr = JSON.parse(rawSentEmails);
+      if (Array.isArray(arr)) SENT_EMAILS_SET = new Set(arr.map(x => String(x || "").toLowerCase()).filter(Boolean));
+    }
+  } catch (e) { SENT_EMAILS_SET = new Set(); }
 
   try {
     const schemaV3Custom = localStorage.getItem("tk_jobhub_custom_schema_v3");
@@ -245,7 +279,6 @@ function loadPersistence() {
       let parsed = JSON.parse(sanitizedCustom);
       let mutatedCustom = sanitizedCustom !== rawCustom;
       if (!schemaV3Custom && Array.isArray(parsed)) {
-        // Remove legacy 2 browser_* items scraped before 1,000+ upgrade
         parsed = parsed.filter(j => j && !String(j.id || "").startsWith("browser_"));
         mutatedCustom = true;
       }
@@ -254,10 +287,23 @@ function loadPersistence() {
     }
     if (!schemaV3Custom) localStorage.setItem("tk_jobhub_custom_schema_v3", "1");
   } catch (e) { CUSTOM_JOBS = []; }
+
+  try {
+    const rawSel = localStorage.getItem(STORAGE_KEY_SELECTED_IDS);
+    if (rawSel) {
+      const ids = JSON.parse(rawSel);
+      if (Array.isArray(ids)) {
+        const jobMap = new Map(getAllJobs().map(j => [j.id, j]));
+        SELECTED_IDS = new Set(ids.filter(id => jobMap.has(id) && !isJobAlreadySent(jobMap.get(id))));
+      }
+    }
+  } catch (e) { SELECTED_IDS = new Set(); }
 }
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(JOB_STATE));
+  localStorage.setItem(STORAGE_KEY_SENT_EMAILS, JSON.stringify(Array.from(SENT_EMAILS_SET)));
+  localStorage.setItem(STORAGE_KEY_SELECTED_IDS, JSON.stringify(Array.from(SELECTED_IDS)));
 }
 
 function saveCustomJobs() {
@@ -277,6 +323,14 @@ function getJobState(id) {
 
 function setJobState(id, patch) {
   JOB_STATE[id] = Object.assign({}, getJobState(id), patch);
+  const job = getAllJobs().find(j => j.id === id);
+  const em = job ? getEffectiveHrEmail(job, JOB_STATE[id]).toLowerCase() : "";
+  if (patch && patch.status === "sent") {
+    if (em) SENT_EMAILS_SET.add(em);
+    SELECTED_IDS.delete(id);
+  } else if (patch && patch.status && patch.status !== "sent" && em) {
+    SENT_EMAILS_SET.delete(em);
+  }
   saveState();
   renderAll();
 }
@@ -472,20 +526,26 @@ function getFilteredJobs(allJobs) {
 function toggleSelectJob(id) {
   if (SELECTED_IDS.has(id)) SELECTED_IDS.delete(id);
   else SELECTED_IDS.add(id);
+  saveState();
   renderAll();
 }
 
 function selectAllFilteredWithEmail() {
-  const filtered = getFilteredJobs(getAllJobs()).filter(j => getJobState(j.id).status !== "skipped");
-  const withMail = filtered.filter(j => j.hr_email || (getJobState(j.id).customEmail || "").trim());
+  const filtered = getFilteredJobs(getAllJobs()).filter(j => {
+    const st = getJobState(j.id).status;
+    return st !== "skipped" && !isJobAlreadySent(j);
+  });
+  const withMail = filtered.filter(j => getEffectiveHrEmail(j, getJobState(j.id)));
   const targetList = withMail.length > 0 ? withMail : filtered.slice(0, 25);
   for (const j of targetList) SELECTED_IDS.add(j.id);
+  saveState();
   renderAll();
-  showToast(`Đã chọn ${targetList.length} job vào hàng Gửi Hàng Loạt!`);
+  showToast(`Đã chọn ${targetList.length} job chưa gửi vào hàng Gửi Hàng Loạt!`);
 }
 
 function clearSelection() {
   SELECTED_IDS.clear();
+  saveState();
   renderAll();
 }
 
@@ -647,7 +707,7 @@ function renderQueue(allJobs) {
   const tbody = document.getElementById("queue-tbody");
   const queueJobs = allJobs.filter(j => {
     const st = getJobState(j.id).status;
-    return st === "approved" || (st === "new" && j.hr_email) || SELECTED_IDS.has(j.id);
+    return !isJobAlreadySent(j) && st !== "skipped" && (st === "approved" || (st === "new" && j.hr_email) || SELECTED_IDS.has(j.id));
   }).sort((a, b) => {
     const sela = SELECTED_IDS.has(a.id) ? 1 : 0;
     const selb = SELECTED_IDS.has(b.id) ? 1 : 0;
@@ -856,15 +916,15 @@ function approveTopFitsWithEmail() {
   let count = 0;
   for (const j of allJobs) {
     const st = getJobState(j.id).status;
-    if (st !== "skipped" && j.hr_email && j.fit_score >= 90) {
-      JOB_STATE[j.id] = Object.assign({}, getJobState(j.id), { status: st === "sent" ? "sent" : "approved" });
+    if (st !== "skipped" && !isJobAlreadySent(j) && getEffectiveHrEmail(j, getJobState(j.id)) && j.fit_score >= 90) {
+      JOB_STATE[j.id] = Object.assign({}, getJobState(j.id), { status: "approved" });
       SELECTED_IDS.add(j.id);
       count++;
     }
   }
   saveState();
   renderAll();
-  showToast(`Đã chọn ${count} job Fit ≥ 90% có Email HR sẵn!`);
+  showToast(`Đã chọn ${count} job Fit ≥ 90% chưa gửi có Email HR sẵn!`);
 }
 
 // --------------------------------------------------------------------------
@@ -1612,17 +1672,69 @@ function copyTextById(id, msg) {
 // --------------------------------------------------------------------------
 function getBulkJobsList() {
   const map = new Map(getAllJobs().map(j => [j.id, j]));
-  return Array.from(SELECTED_IDS).map(id => map.get(id)).filter(Boolean);
+  let pruned = false;
+  const list = [];
+  for (const id of Array.from(SELECTED_IDS)) {
+    const j = map.get(id);
+    if (!j || isJobAlreadySent(j)) {
+      SELECTED_IDS.delete(id);
+      pruned = true;
+    } else {
+      list.push(j);
+    }
+  }
+  if (pruned) saveState();
+  return list;
+}
+
+function renderBulkResumeBanner() {
+  const banner = document.getElementById("bulk-resume-banner");
+  const sendLiveBtn = document.getElementById("bulk-btn-send-live");
+  const all = getAllJobs();
+  const totalSent = all.filter(j => isJobAlreadySent(j)).length;
+  const pending = getBulkJobsList();
+  const totalUnsentAll = all.filter(j => !isJobAlreadySent(j) && getJobState(j.id).status !== "skipped" && getEffectiveHrEmail(j, getJobState(j.id))).length;
+  const nextJob = pending[0];
+  const nextEmail = nextJob ? getEffectiveHrEmail(nextJob, getJobState(nextJob.id)) : "";
+
+  if (banner) {
+    banner.innerHTML = totalSent > 0
+      ? `<span><i class="fa-solid fa-forward-step" style="color:#059669;"></i> Đã gửi: <strong>${totalSent}</strong> email (đã tự loại khỏi hàng chờ để không gửi trùng) • Còn trong đợt này: <strong>${pending.length}</strong> (Tổng chưa gửi: ${totalUnsentAll})${nextJob ? ` — <strong>Tiếp theo sẽ gửi từ:</strong> ${escapeHtml(nextJob.company)} (<code class="notranslate">${escapeHtml(nextEmail)}</code>)` : ""}</span>`
+      : `<span><i class="fa-solid fa-paper-plane" style="color:#0284c7;"></i> Đã gửi trước đó: <strong>0</strong> email • Sẵn sàng trong đợt này: <strong>${pending.length}</strong> (Tổng có email: ${totalUnsentAll})${nextJob ? ` — Bắt đầu từ: ${escapeHtml(nextJob.company)}` : ""}</span>`;
+  }
+  if (sendLiveBtn) {
+    if (totalSent > 0 && pending.length > 0) {
+      sendLiveBtn.innerHTML = `<i class="fa-solid fa-forward-step"></i> GỬI TIẾP TỪ EMAIL LIỀN SAU (${pending.length} còn lại)`;
+    } else {
+      sendLiveBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> GỬI THẬT TỚI TẤT CẢ HR`;
+    }
+  }
+}
+
+async function resetSentHistory() {
+  if (!confirm("Bạn có chắc muốn xóa lịch sử các email ĐÃ GỬI để cho phép gửi lại từ đầu không?")) return;
+  SENT_EMAILS_SET.clear();
+  for (const [jid, st] of Object.entries(JOB_STATE)) {
+    if (st && st.status === "sent") {
+      st.status = "new";
+      delete st.sentAt;
+    }
+  }
+  saveState();
+  await sendBulkControlSignal("clear_sent_history");
+  renderAll();
+  renderBulkTable();
+  showToast("Đã reset lịch sử đã gửi — toàn bộ danh sách có thể gửi từ đầu!");
 }
 
 function openBulkModal() {
-  if (SELECTED_IDS.size === 0) {
-    // Auto-select approved jobs or high-fit jobs with direct HR email
+  if (getBulkJobsList().length === 0) {
     const candidates = getAllJobs().filter(j => {
       const st = getJobState(j.id).status;
-      return st === "approved" || (st === "new" && (j.hr_email || "").trim());
+      return !isJobAlreadySent(j) && st !== "skipped" && (st === "approved" || getEffectiveHrEmail(j, getJobState(j.id)));
     });
     for (const j of candidates.slice(0, 20)) SELECTED_IDS.add(j.id);
+    saveState();
     updateSelectionUI();
   }
   renderBulkTable();
@@ -1636,13 +1748,14 @@ function closeBulkModal() {
 }
 
 function renderBulkTable() {
+  renderBulkResumeBanner();
   const tbody = document.getElementById("bulk-table-tbody");
   if (!tbody) return;
   const jobs = getBulkJobsList();
 
   if (jobs.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">
-      Chưa có công việc nào được chọn. Hãy bấm nút <strong>"Nạp thêm tất cả Job có Email HR"</strong> hoặc tick vào thẻ công việc bên ngoài.
+      Tất cả các job trong đợt này đều đã được gửi hoặc chưa chọn job nào. Bấm <strong>"Nạp thêm tất cả Job có Email HR"</strong> để nạp các email chưa gửi tiếp theo!
     </td></tr>`;
     return;
   }
@@ -1725,6 +1838,7 @@ function updateBulkRowField(jobId, field, value) {
 
 function removeFromBulk(jobId) {
   SELECTED_IDS.delete(jobId);
+  saveState();
   updateSelectionUI();
   renderBulkTable();
 }
@@ -1733,15 +1847,16 @@ function loadAllEmailJobsIntoBulk() {
   let added = 0;
   for (const j of getAllJobs()) {
     const st = getJobState(j.id);
-    const hasMail = Boolean((st.customEmail !== undefined ? st.customEmail : j.hr_email || "").trim());
-    if (st.status !== "skipped" && hasMail && !SELECTED_IDS.has(j.id)) {
+    const hasMail = Boolean(getEffectiveHrEmail(j, st));
+    if (st.status !== "skipped" && !isJobAlreadySent(j) && hasMail && !SELECTED_IDS.has(j.id)) {
       SELECTED_IDS.add(j.id);
       added++;
     }
   }
+  saveState();
   updateSelectionUI();
   renderBulkTable();
-  showToast(added > 0 ? `Đã nạp thêm ${added} công việc có sẵn Email HR!` : "Tất cả các job có Email HR đã có trong danh sách.");
+  showToast(added > 0 ? `Đã nạp thêm ${added} công việc CHƯA GỬI có sẵn Email HR!` : "Tất cả các job chưa gửi đã có trong danh sách.");
 }
 
 function bulkApplySubjectStyle(styleKey) {
@@ -1874,13 +1989,19 @@ function stopBulkSend() {
     try { BULK_SEND_STATE.abortCtrl.abort(); } catch (e) {}
   }
   sendBulkControlSignal("stop");
+  updateSelectionUI();
+  renderBulkTable();
+  const nextPending = getBulkJobsList()[0];
+  const nextInfo = nextPending
+    ? `Lần sau sẽ tự gửi tiếp từ: ${nextPending.company} (${getEffectiveHrEmail(nextPending, getJobState(nextPending.id))})`
+    : "Tất cả email trong đợt đã gửi xong!";
   updateBulkProgressUI({
     statusText: `⏹ Đã dừng hẳn tiến trình (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})`,
-    detailText: `Đã gửi thành công ${BULK_SEND_STATE.sent} email trước khi dừng.`,
+    detailText: `Đã gửi xong ${BULK_SEND_STATE.sent} email. ${nextInfo}`,
     stateClass: "is-stopped"
   });
-  appendBulkLog(`[Control] Đã bấm DỪNG HẲN (Stop) tại ${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total}.`);
-  showToast("Đã dừng tiến trình gửi email!");
+  appendBulkLog(`[Control] Đã bấm DỪNG HẲN (Stop). ${nextInfo}`);
+  showToast("Đã dừng! Lần sau bấm gửi sẽ tự tiếp tục từ email liền sau.");
 }
 
 async function launchGmailWave(startIdx, endIdx) {
@@ -1888,9 +2009,10 @@ async function launchGmailWave(startIdx, endIdx) {
     showToast("Đang có tiến trình chạy! Hãy Tạm dừng hoặc Dừng hẳn trước.");
     return;
   }
-  const slice = getBulkJobsList().slice(startIdx, endIdx);
+  // getBulkJobsList() already excludes any already-sent emails, so slicing (0, 5) always continues from the next unsent!
+  const slice = getBulkJobsList().slice(0, Math.max(1, endIdx - startIdx));
   if (slice.length === 0) {
-    showToast("Không còn email nào trong đợt này!");
+    showToast("Không còn email chưa gửi nào trong đợt này!");
     return;
   }
 
@@ -1900,7 +2022,7 @@ async function launchGmailWave(startIdx, endIdx) {
   });
   updateBulkProgressUI({
     visible: true,
-    statusText: `Đang mở đợt Gmail Web (${slice.length} tab)...`,
+    statusText: `Đang mở đợt Gmail Web (${slice.length} tab chưa gửi)...`,
     detailText: "Bắt đầu mở tab soạn thư..."
   });
 
@@ -1914,14 +2036,10 @@ async function launchGmailWave(startIdx, endIdx) {
     const url = `https://mail.google.com/mail/?view=cm&fs=1&authuser=${encodeURIComponent(WORK_EMAIL)}&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
 
     window.open(url, "_blank");
-    JOB_STATE[j.id] = Object.assign({}, getJobState(j.id), {
-      status: "sent",
-      sentAt: new Date().toLocaleString("vi-VN")
-    });
+    markJobAsSentPersist(j.id, to, new Date().toLocaleString("vi-VN"));
     BULK_SEND_STATE.done++;
     BULK_SEND_STATE.sent++;
-    saveState();
-    appendBulkLog(`[Gmail Wave] Đã mở tab #${startIdx + i + 1}: ${j.company} -> ${to || "(chưa điền email)"}`);
+    appendBulkLog(`[Gmail Wave] Đã mở tab #${i + 1}: ${j.company} -> ${to || "(chưa điền email)"}`);
     updateBulkProgressUI({
       statusText: `Đang mở Gmail Web (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})...`,
       detailText: `Đã mở: ${j.company} (${to || "Portal"})`
@@ -1935,9 +2053,12 @@ async function launchGmailWave(startIdx, endIdx) {
 
   const wasStopped = BULK_SEND_STATE.stopped;
   BULK_SEND_STATE.running = false;
+  updateSelectionUI();
+  renderBulkTable();
+  const nextPending = getBulkJobsList()[0];
   updateBulkProgressUI({
     statusText: wasStopped ? `⏹ Đã dừng Gmail Wave (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})` : `✅ Đã mở xong ${BULK_SEND_STATE.sent} tab Gmail Web`,
-    detailText: wasStopped ? "Đã dừng theo yêu cầu." : "Nếu trình duyệt chặn Popup, chọn Always allow popups rồi bấm Send từng tab.",
+    detailText: nextPending ? `Tiếp theo chưa gửi: ${nextPending.company}` : "Đã xử lý hết danh sách đợt này.",
     stateClass: wasStopped ? "is-stopped" : ""
   });
   renderAll();
@@ -1947,9 +2068,9 @@ function markBulkBatchAsSent() {
   const nowStr = new Date().toLocaleString("vi-VN");
   const jobs = getBulkJobsList();
   for (const j of jobs) {
-    JOB_STATE[j.id] = Object.assign({}, getJobState(j.id), { status: "sent", sentAt: nowStr });
+    markJobAsSentPersist(j.id, getEffectiveHrEmail(j, getJobState(j.id)), nowStr);
   }
-  saveState();
+  updateSelectionUI();
   renderAll();
   renderBulkTable();
   showToast(`Đã đánh dấu "Đã gửi Mail" cho ${jobs.length} công việc!`);
@@ -1988,25 +2109,49 @@ async function checkLocalMailerHealth(silent = false) {
   try {
     const resp = await fetch(url, { method: "GET" });
     const data = await resp.json();
-    if (data.ok) {
-      HAS_SAVED_APP_PASSWORD = Boolean(data.has_saved_app_password);
-      if (HAS_SAVED_APP_PASSWORD && passEl && (!passEl.value || passEl.value.trim() === "")) {
-        passEl.value = "__SAVED__";
+      if (data.ok) {
+        HAS_SAVED_APP_PASSWORD = Boolean(data.has_saved_app_password);
+        let synced = false;
+        if (Array.isArray(data.sent_emails)) {
+          for (const em of data.sent_emails) {
+            const clean = String(em || "").trim().toLowerCase();
+            if (clean && !SENT_EMAILS_SET.has(clean)) {
+              SENT_EMAILS_SET.add(clean);
+              synced = true;
+            }
+          }
+        }
+        if (Array.isArray(data.sent_ids)) {
+          for (const jid of data.sent_ids) {
+            if (jid && getJobState(jid).status !== "sent") {
+              JOB_STATE[jid] = Object.assign({}, getJobState(jid), { status: "sent", sentAt: getJobState(jid).sentAt || "Đã gửi trước đó" });
+              SELECTED_IDS.delete(jid);
+              synced = true;
+            }
+          }
+        }
+        if (synced) {
+          saveState();
+          renderAll();
+          renderBulkResumeBanner();
+        }
+        if (HAS_SAVED_APP_PASSWORD && passEl && (!passEl.value || passEl.value.trim() === "")) {
+          passEl.value = "__SAVED__";
+        }
+        if (data.default_sender && senderEl && !senderEl.value) {
+          senderEl.value = data.default_sender;
+        }
+        if (savedHint) {
+          savedHint.style.display = HAS_SAVED_APP_PASSWORD ? "block" : "none";
+        }
+        badge.textContent = HAS_SAVED_APP_PASSWORD
+          ? "Server :8787 SẴN SÀNG (Đã nạp App Password + PDF CV)"
+          : "Server :8787 SẴN SÀNG (Kèm PDF CV)";
+        badge.style.background = "#d1fae5";
+        badge.style.color = "#065f46";
+        if (!silent) appendBulkLog(`[Health] Kết nối bulk_mailer.py thành công (SavedPassword=${HAS_SAVED_APP_PASSWORD}, SentHistory=${data.sent_history_count || 0}). CV Assets: ${JSON.stringify(data.cv_assets)}`);
+        return true;
       }
-      if (data.default_sender && senderEl && !senderEl.value) {
-        senderEl.value = data.default_sender;
-      }
-      if (savedHint) {
-        savedHint.style.display = HAS_SAVED_APP_PASSWORD ? "block" : "none";
-      }
-      badge.textContent = HAS_SAVED_APP_PASSWORD
-        ? "Server :8787 SẴN SÀNG (Đã nạp App Password + PDF CV)"
-        : "Server :8787 SẴN SÀNG (Kèm PDF CV)";
-      badge.style.background = "#d1fae5";
-      badge.style.color = "#065f46";
-      if (!silent) appendBulkLog(`[Health] Kết nối bulk_mailer.py thành công (SavedPassword=${HAS_SAVED_APP_PASSWORD}). CV Assets: ${JSON.stringify(data.cv_assets)}`);
-      return true;
-    }
   } catch (e) {
     HAS_SAVED_APP_PASSWORD = false;
     if (savedHint) savedHint.style.display = "none";
@@ -2119,10 +2264,11 @@ async function oneClickSendAllUnsentJobs() {
     showToast("Tiến trình gửi đang chạy! Xem tiến độ trong hộp Gửi Hàng Loạt.");
     return;
   }
+  await checkLocalMailerHealth(true);
   const unsentWithMail = getAllJobs().filter(j => {
     const st = getJobState(j.id);
     const em = getEffectiveHrEmail(j, st);
-    return em && st.status !== "skipped" && st.status !== "sent";
+    return em && st.status !== "skipped" && !isJobAlreadySent(j);
   });
   if (unsentWithMail.length === 0) {
     openBulkModal();
@@ -2132,7 +2278,6 @@ async function oneClickSendAllUnsentJobs() {
   for (const j of unsentWithMail) SELECTED_IDS.add(j.id);
   saveState();
   openBulkModal();
-  await checkLocalMailerHealth(true);
   await sendBulkViaLocalServer("live");
 }
 
@@ -2142,19 +2287,15 @@ async function sendBulkViaLocalServer(mode) {
     return;
   }
 
-  const fastMode = Boolean(document.getElementById("smtp-fast-mode")?.checked);
-  let jobs = getBulkJobsList();
-  if (mode === "live" && fastMode) {
-    const beforeLen = jobs.length;
-    jobs = jobs.filter(j => getJobState(j.id).status !== "sent");
-    const skippedSent = beforeLen - jobs.length;
-    if (skippedSent > 0) {
-      appendBulkLog(`[FastMode] Tự động bỏ qua ${skippedSent} job đã gửi trước đó.`);
-    }
+  if (mode === "live") {
+    await checkLocalMailerHealth(true);
   }
+  const fastMode = Boolean(document.getElementById("smtp-fast-mode")?.checked);
+  const jobs = getBulkJobsList();
 
   if (jobs.length === 0) {
-    showToast("Chưa còn job chưa gửi nào trong đợt này!");
+    renderBulkTable();
+    showToast("Chưa còn email chưa gửi nào trong đợt này! Bạn có thể bấm Nạp thêm Job hoặc Reset lịch sử nếu muốn gửi lại.");
     return;
   }
 
@@ -2265,16 +2406,19 @@ async function sendBulkViaLocalServer(mode) {
       const r = (res.results || [])[0];
       if (r) {
         appendBulkLog(` - [${r.status}] ${r.company} (${r.to}) -> ${r.detail}`);
-        const okStatus = r.status === "sent" || r.status === "validated_dry_run";
         BULK_SEND_STATE.done++;
-        if (okStatus) {
+        if (r.status === "sent" || r.status === "validated_dry_run") {
           BULK_SEND_STATE.sent++;
           if (mode === "live" && r.status === "sent" && r.id) {
-            JOB_STATE[r.id] = Object.assign({}, getJobState(r.id), { status: "sent", sentAt: nowStr });
-            saveState();
+            markJobAsSentPersist(r.id, r.to, nowStr);
             setBulkRowStatusTag(r.id, `<span class="badge-verified-email"><i class="fa-solid fa-paper-plane"></i> Đã gửi SMTP</span>`);
           } else {
             setBulkRowStatusTag(r.id, `<span class="badge-verified-email"><i class="fa-solid fa-check"></i> ${escapeHtml(r.detail)}</span>`);
+          }
+        } else if (r.status === "skipped_already_sent") {
+          if (mode === "live" && r.id) {
+            markJobAsSentPersist(r.id, r.to, nowStr);
+            setBulkRowStatusTag(r.id, `<span class="badge-verified-email"><i class="fa-solid fa-forward"></i> Đã gửi trước đó</span>`);
           }
         } else {
           BULK_SEND_STATE.failed++;
@@ -2318,15 +2462,21 @@ async function sendBulkViaLocalServer(mode) {
     BULK_SEND_STATE.abortCtrl = null;
     if (mode === "live") {
       saveState();
+      updateSelectionUI();
+      renderBulkTable();
       renderAll();
     }
+    const nextPending = mode === "live" ? getBulkJobsList()[0] : null;
+    const nextHint = nextPending
+      ? ` Lần sau bấm gửi sẽ tiếp tục từ: ${nextPending.company} (${getEffectiveHrEmail(nextPending, getJobState(nextPending.id))})`
+      : "";
     updateBulkProgressUI({
       statusText: wasStopped
         ? `⏹ Đã dừng (${BULK_SEND_STATE.done}/${BULK_SEND_STATE.total})`
         : `✅ Hoàn tất (${mode}): ${BULK_SEND_STATE.sent} thành công, ${BULK_SEND_STATE.failed} lỗi/chặn`,
       detailText: wasStopped
-        ? `Đã xử lý ${BULK_SEND_STATE.done} email (${BULK_SEND_STATE.sent} thành công).`
-        : "Phiên gửi SMTP đã đóng an toàn.",
+        ? `Đã xử lý ${BULK_SEND_STATE.done} email (${BULK_SEND_STATE.sent} thành công).${nextHint}`
+        : `Phiên gửi SMTP đã đóng an toàn.${nextHint}`,
       stateClass: wasStopped ? "is-stopped" : ""
     });
     showToast(`Hoàn tất (${mode}): ${BULK_SEND_STATE.sent} thành công, ${BULK_SEND_STATE.failed} bỏ qua/lỗi.`);

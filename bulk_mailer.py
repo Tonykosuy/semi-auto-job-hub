@@ -31,6 +31,7 @@ from typing import Any, Dict, List
 
 ROOT_DIR = Path(__file__).resolve().parent
 SECRET_FILE = ROOT_DIR / ".env.local"
+SENT_HISTORY_FILE = ROOT_DIR / "data" / "sent_history.json"
 ASSETS_DIR = ROOT_DIR / "assets"
 CV_FILES = {
     "vi": ASSETS_DIR / "CV_Phuc_Nguyen_VI.pdf",
@@ -47,9 +48,64 @@ VERIFY_CACHE: Dict[str, Dict[str, Any]] = {}
 CACHE_LOCK = threading.Lock()
 CONTROL_LOCK = threading.Lock()
 SMTP_LOCK = threading.Lock()
+HISTORY_LOCK = threading.Lock()
 
 BULK_CONTROL: Dict[str, bool] = {"paused": False, "stopped": False}
 SMTP_POOL: Dict[str, Any] = {"server": None, "sender": "", "password": "", "host": "", "port": 0}
+
+
+def load_sent_history() -> Dict[str, Dict[str, Any]]:
+    """Load persisted sent job IDs and recipient email addresses from data/sent_history.json."""
+    with HISTORY_LOCK:
+        if not SENT_HISTORY_FILE.is_file():
+            return {"sent_ids": {}, "sent_emails": {}}
+        try:
+            raw = json.loads(SENT_HISTORY_FILE.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                return {
+                    "sent_ids": dict(raw.get("sent_ids") or {}),
+                    "sent_emails": dict(raw.get("sent_emails") or {}),
+                }
+        except Exception:
+            pass
+        return {"sent_ids": {}, "sent_emails": {}}
+
+
+def _write_sent_history(history: Dict[str, Dict[str, Any]]) -> None:
+    SENT_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SENT_HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def record_sent_email(job_id: str, to_email: str, company: str = "", subject: str = "") -> None:
+    """Persist a single sent email immediately so Stop/reload never re-sends it."""
+    jid = str(job_id or "").strip()
+    em = str(to_email or "").strip().lower()
+    now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    with HISTORY_LOCK:
+        if SENT_HISTORY_FILE.is_file():
+            try:
+                raw = json.loads(SENT_HISTORY_FILE.read_text(encoding="utf-8"))
+                hist = {
+                    "sent_ids": dict(raw.get("sent_ids") or {}),
+                    "sent_emails": dict(raw.get("sent_emails") or {}),
+                }
+            except Exception:
+                hist = {"sent_ids": {}, "sent_emails": {}}
+        else:
+            hist = {"sent_ids": {}, "sent_emails": {}}
+
+        entry = {"company": company, "subject": subject, "sent_at": now_str, "email": em, "id": jid}
+        if jid:
+            hist["sent_ids"][jid] = entry
+        if em:
+            hist["sent_emails"][em] = entry
+        _write_sent_history(hist)
+
+
+def clear_sent_history() -> None:
+    """Reset persisted sent history when user explicitly asks to start fresh."""
+    with HISTORY_LOCK:
+        _write_sent_history({"sent_ids": {}, "sent_emails": {}})
 
 
 def load_local_smtp_secret() -> Dict[str, str]:
@@ -306,6 +362,7 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
     close_after = bool(payload.get("close_after", not reuse_session))
     verify_before_send = bool(payload.get("verify_before_send", True))
     fast_send = bool(payload.get("fast_send", False))
+    allow_resend = bool(payload.get("allow_resend", False))
     reset_control = bool(payload.get("reset_control", False))
 
     if reset_control:
@@ -316,6 +373,7 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not items:
         return {"ok": False, "error": "Danh sách email trống.", "results": []}
 
+    sent_history = load_sent_history() if (mode == "live" and not allow_resend) else {"sent_ids": {}, "sent_emails": {}}
     results: List[Dict[str, Any]] = []
 
     if mode == "dry_run":
@@ -368,6 +426,35 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
             "results": [],
         }
 
+    if mode == "live" and not allow_resend:
+        pending_check = []
+        for it in items:
+            iid = str(it.get("id") or "").strip()
+            iem = str(it.get("to") or "").strip().lower()
+            if (iid and iid in sent_history["sent_ids"]) or (iem and iem in sent_history["sent_emails"]):
+                results.append(
+                    {
+                        "id": it.get("id"),
+                        "company": it.get("company", ""),
+                        "to": iem,
+                        "subject": str(it.get("subject") or ""),
+                        "status": "skipped_already_sent",
+                        "detail": "Đã gửi trước đó — tự động bỏ qua để tiếp tục từ email kế tiếp",
+                    }
+                )
+            else:
+                pending_check.append(it)
+        if not pending_check:
+            return {
+                "ok": True,
+                "mode": mode,
+                "sent_count": 0,
+                "skipped_count": len(results),
+                "failed_count": 0,
+                "results": results,
+            }
+        items = pending_check
+
     try:
         server = _get_or_open_smtp(smtp_host, smtp_port, sender_email, app_password)
     except Exception as exc:
@@ -398,12 +485,29 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
                 time.sleep(0.15)
 
             raw_to = str(item.get("to") or "").strip()
+            item_id = str(item.get("id") or "").strip()
             target_to = sender_email if mode == "test_self" else raw_to
             subj = str(item.get("subject") or "").strip()
             if mode == "test_self":
                 subj = f"[TEST-SELF -> {raw_to}] {subj}"
             body = str(item.get("body") or "").strip()
             job_lang = str(item.get("lang") or "vi")
+
+            if mode == "live" and not allow_resend:
+                already_by_id = bool(item_id and item_id in sent_history["sent_ids"])
+                already_by_email = bool(target_to and target_to.lower() in sent_history["sent_emails"])
+                if already_by_id or already_by_email:
+                    results.append(
+                        {
+                            "id": item.get("id"),
+                            "company": item.get("company", ""),
+                            "to": target_to,
+                            "subject": subj,
+                            "status": "skipped_already_sent",
+                            "detail": "Đã gửi trước đó — tự động bỏ qua để tiếp tục từ email kế tiếp",
+                        }
+                    )
+                    continue
 
             if not target_to or "@" not in target_to or not subj or not body:
                 results.append(
@@ -464,6 +568,12 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
                 except smtplib.SMTPServerDisconnected:
                     server = _get_or_open_smtp(smtp_host, smtp_port, sender_email, app_password, force_new=True)
                     server.send_message(msg)
+                if mode == "live":
+                    record_sent_email(item_id, target_to, str(item.get("company") or ""), subj)
+                    if item_id:
+                        sent_history["sent_ids"][item_id] = {"email": target_to.lower()}
+                    if target_to:
+                        sent_history["sent_emails"][target_to.lower()] = {"id": item_id}
                 results.append(
                     {
                         "id": item.get("id"),
@@ -511,7 +621,8 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
         "ok": True,
         "mode": mode,
         "sent_count": sum(1 for r in results if r["status"] == "sent"),
-        "failed_count": sum(1 for r in results if r["status"] != "sent"),
+        "skipped_count": sum(1 for r in results if r["status"] == "skipped_already_sent"),
+        "failed_count": sum(1 for r in results if r["status"] not in ("sent", "skipped_already_sent")),
         "results": results,
     }
 
@@ -544,6 +655,7 @@ class JobHubRequestHandler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path.split("?")[0] == "/api/health":
             saved = load_local_smtp_secret()
+            hist = load_sent_history()
             self._send_json(
                 200,
                 {
@@ -553,6 +665,9 @@ class JobHubRequestHandler(SimpleHTTPRequestHandler):
                     "cv_assets": check_cv_assets(),
                     "default_sender": saved.get("sender_email") or DEFAULT_SENDER,
                     "has_saved_app_password": bool(saved.get("app_password")),
+                    "sent_history_count": len(hist["sent_emails"]),
+                    "sent_ids": list(hist["sent_ids"].keys()),
+                    "sent_emails": list(hist["sent_emails"].keys()),
                 },
             )
             return
@@ -653,6 +768,8 @@ class JobHubRequestHandler(SimpleHTTPRequestHandler):
                     elif action == "reset":
                         BULK_CONTROL["paused"] = False
                         BULK_CONTROL["stopped"] = False
+                    elif action == "clear_sent_history":
+                        clear_sent_history()
                     state = dict(BULK_CONTROL)
                 if action in ("stop", "reset", "close_smtp"):
                     close_pooled_smtp()

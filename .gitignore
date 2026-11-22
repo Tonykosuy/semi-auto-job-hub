@@ -3,3 +3,4 @@ __pycache__/
 .env
 .env.local
 local_smtp_secret.json
+data/sent_history.json
