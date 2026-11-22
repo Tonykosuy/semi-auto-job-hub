@@ -255,11 +255,11 @@ def dispatch_bulk_emails(payload: Dict[str, Any]) -> Dict[str, Any]:
     smtp_port = int(payload.get("smtp_port") or DEFAULT_SMTP_PORT)
     attach_cv = str(payload.get("attach_cv") or "auto").strip().lower()
     delay_sec = max(0.0, min(10.0, float(payload.get("delay_sec", 0.6))))
+    items: List[Dict[str, Any]] = payload.get("items") or []
     reuse_session = bool(payload.get("reuse_session", len(items) == 1))
     close_after = bool(payload.get("close_after", not reuse_session))
     verify_before_send = bool(payload.get("verify_before_send", True))
     reset_control = bool(payload.get("reset_control", False))
-    items: List[Dict[str, Any]] = payload.get("items") or []
 
     if reset_control:
         with CONTROL_LOCK:
